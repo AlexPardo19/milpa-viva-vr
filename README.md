@@ -1,4 +1,4 @@
-# 🌽 Simulador Botánico WebXR · Milpa Tradicional y Maíz Animado (v3.0)
+# Simulador Botánico WebXR · Milpa Tradicional y Maíz Animado (v3.0)
 ## *Zea mays* L. — 4 Razas Nativas, Modo Videojuego en Primera Persona (FPS), Audio Procedural y Don Elote
 
 Bienvenido a la versión **v3.0 Inmersiva** del **Simulador Interactivo y Educativo del Maíz Mexicano**. Ahora puedes **moverte libremente como en un videojuego**, sostener y blandir las herramientas en primera persona (azada, saco de semillas, regadera, abono y mano de cosecha), labrar surcos tridimensionales en la tierra, y aprender sabiduría y leyendas ancestrales platicando con el entrañable espantapájaros **"Don Elote"**.
@@ -7,11 +7,11 @@ Bienvenido a la versión **v3.0 Inmersiva** del **Simulador Interactivo y Educat
 
 > [!NOTE]
 > Para consultar el manual técnico exhaustivo con la arquitectura matemática, pipeline de 60 estados, ontogenia vegetal y descripción de cada clase, consulta el documento principal:  
-> **👉 [FUNCIONAMIENTO_PROYECTO.md](FUNCIONAMIENTO_PROYECTO.md)**
+> ** [FUNCIONAMIENTO_PROYECTO.md](FUNCIONAMIENTO_PROYECTO.md)**
 
 ---
 
-## 🎮 Jugabilidad y Manipulación Física en Primera Persona
+## Jugabilidad y Manipulación Física en Primera Persona
 
 ### 1. Movimiento Libre de Videojuego (FPS)
 * **`W, A, S, D`** (o Flechas): Camina libremente por el huerto, acércate al cobertizo o recorre la hilera de milpa.
@@ -79,7 +79,8 @@ La aplicación incorpora un motor de audio por síntesis matemática en tiempo r
 
 ---
 
-## 🚀 Inicio Rápido
+## 
+Inicio Rápido
 
 ```bash
 # Iniciar servidor de desarrollo local
