@@ -1,0 +1,26 @@
+{
+  "name": "maiz-vr-estilizado",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:https": "HTTPS=true vite",
+    "dev:http": "NO_HTTPS=true vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "render": "node scripts/render_cartoon_all.js"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^6.49.0",
+    "@babylonjs/gui": "^6.49.0",
+    "@babylonjs/inspector": "^6.49.0",
+    "@fontsource/pixelify-sans": "^5.3.0",
+    "@fontsource/vt323": "^5.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.1.0",
+    "typescript": "~5.6.2",
+    "vite": "^5.4.10"
+  }
+}

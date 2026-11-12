@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>Milpa Viva VR v4.0 · Simulador Agroecológico Mesoamericano</title>
+
+  <style>
+    :root {
+      --bg: #1e293b;
+      --ink: #f8fafc;
+      box-sizing: border-box;
+    }
+    *, *::before, *::after {
+      box-sizing: inherit;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: "Pixelify Sans", "VT323", monospace, system-ui;
+      color: var(--ink);
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #renderCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      outline: none;
+      touch-action: none;
+      z-index: 1;
+    }
+
+    /* Pantalla de Carga Estilo Retro / Minecraft */
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at center, #1b281f 0%, #090e0b 100%);
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      transition: opacity 0.4s ease;
+    }
+    .loading-card {
+      background: rgba(15, 23, 18, 0.94);
+      border: 4px solid #374151;
+      box-shadow: 0 0 0 4px #000000, 0 12px 32px rgba(0, 0, 0, 0.85);
+      padding: 28px 36px;
+      text-align: center;
+      max-width: 460px;
+      width: 90%;
+    }
+    .loading-logo {
+      font-size: 42px;
+      margin-bottom: 6px;
+      display: inline-block;
+      animation: floatCorn 2s ease-in-out infinite;
+    }
+    @keyframes floatCorn {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    .loading-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffd74a;
+      text-shadow: 2px 2px 0 #000;
+      margin: 0 0 8px 0;
+      letter-spacing: 0.5px;
+    }
+    .loading-desc {
+      font-size: 13px;
+      color: #cbd5e1;
+      margin: 0 0 18px 0;
+      text-shadow: 1px 1px 0 #000;
+      line-height: 1.4;
+    }
+    .loading-bar-wrap {
+      width: 100%;
+      height: 14px;
+      background: #111827;
+      border: 2px solid #000;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+    }
+    .loading-bar-fill {
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        -45deg,
+        #16a34a,
+        #16a34a 12px,
+        #22c55e 12px,
+        #22c55e 24px
+      );
+      background-size: 34px 34px;
+      animation: moveStripes 1s linear infinite;
+    }
+    @keyframes moveStripes {
+      0% { background-position: 0 0; }
+      100% { background-position: 34px 0; }
+    }
+
+    /* Ajustes responsivos para pantallas móviles o visores VR */
+    @media (max-width: 680px) {
+      #mc-hotbar-container {
+        transform: translateX(-50%) scale(0.82) !important;
+        transform-origin: bottom center !important;
+        bottom: 4px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-screen">
+    <div class="loading-card">
+      <div class="loading-logo">🌽</div>
+      <h1 class="loading-title">MILPA VIVA VR v4.0</h1>
+      <p class="loading-desc">Preparando el surco de siembra, variedades criollas y herramientas...</p>
+      <div class="loading-bar-wrap">
+        <div class="loading-bar-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="renderCanvas"></canvas>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
