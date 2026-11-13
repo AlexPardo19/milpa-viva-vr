@@ -13,6 +13,7 @@ import { CanastaRecoleccion3D } from '../vr/canasta_cosecha';
 import { AudioSintetizador } from '../audio_sintetizador';
 import { BusEventos } from './bus_eventos';
 import { clamp01 } from './util';
+import { crearTexPiedraPixel } from '../ui/texturas_pixel_3d';
 
 export type EtapaCocina = 'ESPERA' | 'NIXTAMAL' | 'MOLIENDA' | 'FORMADO' | 'COMAL' | 'LISTO';
 
@@ -136,10 +137,11 @@ export class FogonCocina {
     private construirEstacion3D(): void {
         const colorContorno = Color3.FromHexString('#25330f');
 
-        // Mesa rústica de adobe y madera para el fogón
+        // Mesa rústica de piedra/adobe pixel-art para el fogón
         const matAdobe = new StandardMaterial('matAdobeFogon', this.scene);
-        matAdobe.diffuseColor = Color3.FromHexString('#8d6e63');
-        matAdobe.emissiveColor = Color3.FromHexString('#8d6e63').scale(0.32);
+        matAdobe.diffuseTexture = crearTexPiedraPixel(this.scene, 2, 1);
+        matAdobe.diffuseColor = Color3.FromHexString('#d6bfa9');
+        matAdobe.emissiveColor = Color3.FromHexString('#4a3931').scale(0.35);
         matAdobe.specularColor = Color3.Black();
 
         const baseMesa = MeshBuilder.CreateBox(
@@ -149,9 +151,6 @@ export class FogonCocina {
         );
         baseMesa.position.y = 0.39;
         baseMesa.material = matAdobe;
-        baseMesa.renderOutline = true;
-        baseMesa.outlineColor = colorContorno;
-        baseMesa.outlineWidth = 0.02;
         baseMesa.parent = this.raiz;
         baseMesa.computeWorldMatrix(true);
         baseMesa.freezeWorldMatrix();
@@ -366,11 +365,11 @@ export class FogonCocina {
         modal.id = 'fogonCocinaModal';
         modal.style.cssText = `
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(30, 18, 10, 0.96); color: #fef3c7;
-            border: 2px solid #f59e0b; border-radius: 16px;
-            padding: 20px 24px; width: min(500px, 94vw); z-index: 2500;
-            font-family: system-ui, sans-serif; display: none;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.85);
+            background: rgba(28, 17, 10, 0.96); color: #fef3c7;
+            border: 4px solid; border-color: #fbbf24 #78350f #78350f #fbbf24;
+            border-radius: 0; padding: 20px 24px; width: min(500px, 94vw); z-index: 2500;
+            font-family: var(--fuente-px); display: none;
+            box-shadow: 0 0 0 4px #000000;
         `;
         document.body.appendChild(modal);
         this.modalEl = modal;
@@ -407,23 +406,23 @@ export class FogonCocina {
         ).join('');
 
         this.modalEl.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:2px solid #78350f;padding-bottom:6px;">
                 <h3 style="margin:0;color:#fbbf24;font-size:1.15rem;">🔥 Fogón Tradicional: Del Surco al Comal</h3>
-                <button id="btnCerrarFogon" style="background:none;border:none;color:#fde68a;font-size:1.3rem;cursor:pointer;">✕</button>
+                <button id="btnCerrarFogon" style="background:#dc2626;border:2px solid;border-color:#fca5a5 #7f1d1d #7f1d1d #fca5a5;border-radius:0;color:#fff;font-size:1rem;cursor:pointer;padding:2px 8px;font-weight:700;">✕</button>
             </div>
-            <div style="font-size:0.85rem;background:rgba(255,255,255,0.07);padding:8px 12px;border-radius:8px;margin-bottom:12px;">
+            <div style="font-size:0.85rem;background:rgba(255,255,255,0.07);border:2px solid #78350f;padding:8px 12px;border-radius:0;margin-bottom:12px;">
                 🧺 <b>Despensa de tu Canasta:</b> 🌽 ${mazorcasCanasta} Mazorcas | 🌿 ${quelites} Quelites | 🫘 ${frijol} Frijol | 🎃 ${calabaza} Calabaza
             </div>
             <label style="display:block;font-size:0.88rem;margin-bottom:6px;color:#fcd34d;">Selecciona Receta Tradicional:</label>
-            <select id="selRecetaFogon" style="width:100%;padding:8px;border-radius:8px;background:#291d12;color:#fef3c7;border:1px solid #d97706;margin-bottom:12px;font-size:0.92rem;">
+            <select id="selRecetaFogon" style="width:100%;padding:8px;border-radius:0;background:#291d12;color:#fef3c7;border:2px solid #d97706;margin-bottom:12px;font-size:0.92rem;font-family:var(--fuente-px);">
                 ${opcionesRecetas}
             </select>
-            <div style="font-size:0.85rem;line-height:1.4;color:#fde68a;background:rgba(245,158,11,0.12);padding:10px;border-radius:8px;margin-bottom:14px;">
+            <div style="font-size:0.85rem;line-height:1.4;color:#fde68a;background:rgba(245,158,11,0.14);border:2px solid rgba(245,158,11,0.45);padding:10px;border-radius:0;margin-bottom:14px;">
                 🔬 <b>Ciencia Culinaria:</b> ${this.recetaSeleccionada.explicacionCientifica}
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
                 <span style="font-size:0.82rem;color:#d97706;">Estado: <b>${this.etapa}</b> (${this.platosPreparados.length}/7 recetas descubiertas)</span>
-                <button id="btnPasoFogon" style="padding:10px 16px;border-radius:10px;border:none;background:#f59e0b;color:#1c1917;font-weight:700;cursor:pointer;">
+                <button id="btnPasoFogon" style="padding:10px 16px;border-radius:0;border:2px solid;border-color:#fef08a #92400e #92400e #fef08a;background:#f59e0b;color:#1c1917;font-weight:700;cursor:pointer;font-family:var(--fuente-px);">
                     ${etiquetasPasos[this.etapa]}
                 </button>
             </div>

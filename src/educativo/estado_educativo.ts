@@ -10,16 +10,47 @@
  *  6. Cosechar la mazorca madura
  */
 
-import { REGLAS_JUEGO } from "../nucleo";
+import { REGLAS_JUEGO, TipoSemilla } from "../nucleo";
 
 export type HerramientaTipo =
   | "mano"
   | "azada"
   | "semilla"
+  | "semilla_chalqueno"
+  | "semilla_azul"
+  | "semilla_rojo"
+  | "semilla_palomero"
   | "regadera"
   | "abono"
   | "sol"
-  | "cosecha";
+  | "cosecha"
+  | "frijol"
+  | "calabaza";
+
+export function esHerramientaSemillaMaiz(h: HerramientaTipo): boolean {
+  return (
+    h === "semilla" ||
+    h === "semilla_chalqueno" ||
+    h === "semilla_azul" ||
+    h === "semilla_rojo" ||
+    h === "semilla_palomero"
+  );
+}
+
+export function variedadDeHerramienta(h: HerramientaTipo): TipoSemilla | null {
+  switch (h) {
+    case "semilla_chalqueno":
+      return "chalqueno";
+    case "semilla_azul":
+      return "azul";
+    case "semilla_rojo":
+      return "rojo";
+    case "semilla_palomero":
+      return "palomero";
+    default:
+      return null;
+  }
+}
 
 export type FaseEducativa =
   | "arar"       // Paso 1: Preparar la tierra

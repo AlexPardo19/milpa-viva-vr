@@ -181,33 +181,34 @@ export class AjustesSistema {
     });
     document.body.appendChild(this.vinetaElem);
 
-    // 2. Barra de subtítulos cerrados (CC)
+    // 2. Barra de subtítulos cerrados (CC) translúcida y pixelada arriba de toasts
     this.subtituloElem = document.createElement("div");
     this.subtituloElem.id = "ccSubtitlesBar";
     Object.assign(this.subtituloElem.style, {
       position: "fixed",
-      bottom: "98px",
+      bottom: "242px",
       left: "50%",
-      transform: "translateX(-50%) translateY(8px)",
-      maxWidth: "680px",
-      backgroundColor: "rgba(15, 23, 42, 0.90)",
+      transform: "translateX(-50%) translateY(6px)",
+      maxWidth: "660px",
+      backgroundColor: "rgba(10, 16, 12, 0.46)",
       color: "#fef08a",
-      padding: "8px 18px",
-      borderRadius: "14px",
-      border: "2px solid #ca8a04",
-      fontFamily: "Trebuchet MS, sans-serif",
-      fontSize: "15px",
+      padding: "5px 14px",
+      borderRadius: "0",
+      border: "1px solid rgba(202, 138, 4, 0.55)",
+      fontFamily: "'Pixelify Sans', 'VT323', monospace",
+      fontSize: "14px",
       fontWeight: "bold",
       textAlign: "center",
+      textShadow: "1.5px 1.5px 0 #000",
       pointerEvents: "none",
       zIndex: "1001",
       opacity: "0",
       transition: "opacity 0.2s ease, transform 0.2s ease",
-      boxShadow: "0 6px 18px rgba(0,0,0,0.45)"
+      boxShadow: "2px 2px 0 rgba(0,0,0,0.35)"
     });
     document.body.appendChild(this.subtituloElem);
 
-    // 3. Modal de Accesibilidad y Confort (Tecla [O])
+    // 3. Modal de Accesibilidad y Confort (Tecla [O]) — Marco pixelado
     this.modalElem = document.createElement("div");
     this.modalElem.id = "modalAjustesVR";
     Object.assign(this.modalElem.style, {
@@ -215,17 +216,18 @@ export class AjustesSistema {
       top: "50%",
       left: "50%",
       transform: "translate(-50%, -50%)",
-      width: "380px",
+      width: "390px",
       maxWidth: "92vw",
-      backgroundColor: "#fffbeb",
-      border: "4px solid #78350f",
-      borderRadius: "18px",
-      padding: "18px 20px",
-      fontFamily: "Trebuchet MS, sans-serif",
-      color: "#1e293b",
-      zIndex: "1100",
+      backgroundColor: "#c6c6c6",
+      border: "4px solid",
+      borderColor: "#ffffff #555555 #555555 #ffffff",
+      borderRadius: "0",
+      padding: "16px 20px",
+      fontFamily: "'Pixelify Sans', 'VT323', monospace",
+      color: "#1e1e1e",
+      zIndex: "2500",
       display: "none",
-      boxShadow: "0 16px 40px rgba(0,0,0,0.55)"
+      boxShadow: "0 0 0 4px #000000"
     });
     document.body.appendChild(this.modalElem);
   }
@@ -234,14 +236,14 @@ export class AjustesSistema {
     if (!this.modalElem) return;
     const v = this.valores;
     this.modalElem.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:2px solid #d97706;padding-bottom:6px;">
-        <h3 style="margin:0;color:#92400e;font-size:19px;">⚙️ Confort VR y Accesibilidad</h3>
-        <button id="btnCerrarAjustes" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:4px 10px;cursor:pointer;font-weight:bold;">✕</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:2px solid #555;padding-bottom:6px;">
+        <h3 style="margin:0;color:#1e1e1e;font-size:18px;">⚙️ Confort VR y Accesibilidad</h3>
+        <button id="btnCerrarAjustes" style="background:#dc2626;color:#fff;border:2px solid;border-color:#fca5a5 #7f1d1d #7f1d1d #fca5a5;border-radius:0;padding:3px 9px;cursor:pointer;font-weight:bold;">✕</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:9px;font-size:14px;">
         <label style="display:flex;justify-content:space-between;align-items:center;">
           <span>🧭 Modo de Giro:</span>
-          <select id="selGiro" style="padding:4px 8px;border-radius:6px;border:1px solid #92400e;">
+          <select id="selGiro" style="padding:4px 8px;border-radius:0;border:2px solid #555;background:#f8fafc;color:#1e1e1e;font-family:inherit;">
             <option value="snap" ${v.giro === "snap" ? "selected" : ""}>Snap 30° (Anti-mareo)</option>
             <option value="suave" ${v.giro === "suave" ? "selected" : ""}>Suave continuo</option>
           </select>
@@ -252,7 +254,7 @@ export class AjustesSistema {
         </label>
         <label style="display:flex;justify-content:space-between;align-items:center;">
           <span>✋ Mano Dominante:</span>
-          <select id="selMano" style="padding:4px 8px;border-radius:6px;border:1px solid #92400e;">
+          <select id="selMano" style="padding:4px 8px;border-radius:0;border:2px solid #555;background:#f8fafc;color:#1e1e1e;font-family:inherit;">
             <option value="right" ${v.manoDominante === "right" ? "selected" : ""}>Derecha</option>
             <option value="left" ${v.manoDominante === "left" ? "selected" : ""}>Izquierda (Zurdo)</option>
           </select>
@@ -271,7 +273,7 @@ export class AjustesSistema {
         </label>
         <label style="display:flex;justify-content:space-between;align-items:center;">
           <span>📳 Intensidad Háptica:</span>
-          <select id="selHaptica" style="padding:4px 8px;border-radius:6px;border:1px solid #92400e;">
+          <select id="selHaptica" style="padding:4px 8px;border-radius:0;border:2px solid #555;background:#f8fafc;color:#1e1e1e;font-family:inherit;">
             <option value="1" ${v.intensidadHaptica === 1 ? "selected" : ""}>100%</option>
             <option value="0.5" ${v.intensidadHaptica === 0.5 ? "selected" : ""}>50%</option>
             <option value="0" ${v.intensidadHaptica === 0 ? "selected" : ""}>0% (Desactivada)</option>
@@ -279,13 +281,13 @@ export class AjustesSistema {
         </label>
         <label style="display:flex;justify-content:space-between;align-items:center;">
           <span>🌐 Idioma / Language:</span>
-          <select id="selIdioma" style="padding:4px 8px;border-radius:6px;border:1px solid #92400e;">
+          <select id="selIdioma" style="padding:4px 8px;border-radius:0;border:2px solid #555;background:#f8fafc;color:#1e1e1e;font-family:inherit;">
             <option value="es" ${v.idioma === "es" ? "selected" : ""}>Español</option>
             <option value="en" ${v.idioma === "en" ? "selected" : ""}>English</option>
           </select>
         </label>
-        <hr style="border:none;border-top:1px solid #fde68a;margin:4px 0;" />
-        <button id="btnBorrarProgreso" style="background:#f97316;color:#fff;border:none;border-radius:8px;padding:7px;cursor:pointer;font-weight:bold;">
+        <hr style="border:none;border-top:2px solid #555;margin:4px 0;" />
+        <button id="btnBorrarProgreso" style="background:#ea580c;color:#fff;border:2px solid;border-color:#fdba74 #7c2d12 #7c2d12 #fdba74;border-radius:0;padding:7px;cursor:pointer;font-weight:bold;font-family:inherit;">
           🗑️ Reiniciar Banco de Semillas y Códice
         </button>
       </div>

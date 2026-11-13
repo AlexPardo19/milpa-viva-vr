@@ -4,6 +4,7 @@ import {
   Color3,
   StandardMaterial,
   DynamicTexture,
+  Texture,
   Mesh,
   MeshBuilder,
   TransformNode,
@@ -15,6 +16,12 @@ import { CanastaRecoleccion3D } from "../vr/canasta_cosecha";
 import { AudioSintetizador } from "../audio_sintetizador";
 import { BusEventos } from "./bus_eventos";
 import { dibujarIcono } from "../ui/iconos_pixel";
+import {
+  crearTexMaderaPixel,
+  crearTexTejaPixel,
+  crearMaterialPixelTex,
+  dibujarMarcoLetreroPixel
+} from "../ui/texturas_pixel_3d";
 
 export interface MazorcaDrop {
   id: number;
@@ -68,6 +75,7 @@ export class AlmacenMazorcas {
     palomero: 0
   };
   public calidadesAlmacenadas: number[] = [];
+  private matTrojePool = new Map<string, StandardMaterial>();
 
   public onMensajeToast?: (msg: string) => void;
   public onCambioInventario?: () => void;
@@ -127,7 +135,7 @@ export class AlmacenMazorcas {
     }
   }
 
-  private guardarAlmacen(): void {
+  public guardarAlmacen(): void {
     try {
       const data: EstadoAlmacen = {
         porVariedad: this.almacenadoPorVariedad,
@@ -145,15 +153,21 @@ export class AlmacenMazorcas {
   private construirTroje3D(): void {
     const colorContorno = Color3.FromHexString("#25330f");
 
-    const matMadera = new StandardMaterial("matTrojeMadera", this.scene);
-    matMadera.diffuseColor = Color3.FromHexString("#854d0e");
-    matMadera.emissiveColor = Color3.FromHexString("#451a03").scale(0.35);
-    matMadera.specularColor = Color3.Black();
+    const matMadera = crearMaterialPixelTex(
+      this.scene,
+      "matTrojeMaderaPx",
+      crearTexMaderaPixel(this.scene, false, 2, 1),
+      "#451a03",
+      0.18
+    );
 
-    const matTecho = new StandardMaterial("matTrojeTecho", this.scene);
-    matTecho.diffuseColor = Color3.FromHexString("#b45309");
-    matTecho.emissiveColor = Color3.FromHexString("#78350f").scale(0.35);
-    matTecho.specularColor = Color3.Black();
+    const matTecho = crearMaterialPixelTex(
+      this.scene,
+      "matTrojeTechoPx",
+      crearTexTejaPixel(this.scene, 3, 2),
+      "#78350f",
+      0.18
+    );
 
     const matHerraje = new StandardMaterial("matTrojeHerraje", this.scene);
     matHerraje.diffuseColor = Color3.FromHexString("#eab308");
@@ -218,12 +232,13 @@ export class AlmacenMazorcas {
     techo.outlineWidth = 0.016;
     techo.parent = this.raiz;
 
-    // Letrero 3D frontal con el conteo de mazorcas almacenadas
+    // Letrero 3D frontal pixel-art con el conteo de mazorcas almacenadas
     this.letreroTex = new DynamicTexture(
       "texLetreroAlmacen",
       { width: 320, height: 160 },
       this.scene,
-      true
+      false,
+      Texture.NEAREST_SAMPLINGMODE
     );
     const matLetrero = new StandardMaterial("matLetreroAlmacen", this.scene);
     matLetrero.diffuseTexture = this.letreroTex;
@@ -590,9 +605,15 @@ export class AlmacenMazorcas {
       const m = this.mazorcasVisualesTroje[i];
       if (i < coloresOrden.length) {
         m.setEnabled(true);
-        const mat = new StandardMaterial(`matTrojeCob_${i}`, this.scene);
-        mat.diffuseColor = Color3.FromHexString(coloresOrden[i]);
-        mat.emissiveColor = Color3.FromHexString(coloresOrden[i]).scale(0.38);
+        const hex = coloresOrden[i];
+        let mat = this.matTrojePool.get(hex);
+        if (!mat) {
+          mat = new StandardMaterial(`matTrojeCob_${hex}`, this.scene);
+          mat.diffuseColor = Color3.FromHexString(hex);
+          mat.emissiveColor = Color3.FromHexString(hex).scale(0.32);
+          mat.specularColor = new Color3(0.04, 0.04, 0.04);
+          this.matTrojePool.set(hex, mat);
+        }
         m.material = mat;
       } else {
         m.setEnabled(false);
@@ -604,13 +625,7 @@ export class AlmacenMazorcas {
     const W = 320;
     const H = 160;
 
-    ctx.fillStyle = "#c6c6c6";
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "#555555";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(2, 2, W - 4, H - 4);
-    ctx.strokeStyle = "#ffffff";
-    ctx.strokeRect(6, 6, W - 12, H - 12);
+    dibujarMarcoLetreroPixel(ctx, W, H, "#c6c6c6", "#2b2b2b", "#ffffff", 4);
 
     ctx.fillStyle = "#1e1e1e";
     ctx.font = 'bold 18px "Pixelify Sans", monospace';

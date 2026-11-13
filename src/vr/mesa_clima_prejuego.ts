@@ -16,6 +16,7 @@ import {
   Color3,
   StandardMaterial,
   DynamicTexture,
+  Texture,
   Mesh,
   MeshBuilder,
   TransformNode,
@@ -25,6 +26,12 @@ import {
   ExecuteCodeAction
 } from "@babylonjs/core";
 import { ClimateState, ESCENARIOS } from "../clima";
+import { registrarSolidoDesdeNodo } from "../colisiones";
+import {
+  configurarSamplingPixel,
+  crearTexMaderaPixel,
+  dibujarMarcoLetreroPixel,
+} from "../ui/texturas_pixel_3d";
 
 export interface MesaClimaCallbacks {
   onIniciarCampo: (climaConfigurado: ClimateState) => void;
@@ -73,14 +80,108 @@ export class MesaClimaPrejuego {
     this.construirCubetasTierra();
     this.construirOrbePronostico();
     this.construirBotonEntrarCampo();
+    this.construirRotulosIntuitivos();
+    registrarSolidoDesdeNodo(this.root, "mesaClima", 0.02);
+  }
+
+  /** Cartel doble cara (se lee desde ambos lados de la mesa). */
+  private crearRotulo(
+    nombre: string,
+    ancho: number,
+    alto: number,
+    pos: Vector3,
+    fondo: string,
+    borde: string,
+    lineas: Array<{ txt: string; px: number; color: string }>,
+    rotX = 0
+  ): void {
+    const W = 256;
+    const H = Math.max(48, Math.round((W * alto) / ancho));
+    const tex = new DynamicTexture(`tex_${nombre}`, { width: W, height: H }, this.scene, false, Texture.NEAREST_SAMPLINGMODE);
+    configurarSamplingPixel(tex);
+    const ctx = tex.getContext() as any;
+    dibujarMarcoLetreroPixel(ctx, W, H, fondo, borde);
+    ctx.textAlign = "center";
+    const total = lineas.reduce((a, l) => a + l.px * 1.2, 0);
+    let y = (H - total) / 2 + lineas[0].px;
+    for (const l of lineas) {
+      ctx.fillStyle = l.color;
+      ctx.font = `bold ${l.px}px 'Pixelify Sans', monospace`;
+      ctx.fillText(l.txt, W / 2, y);
+      y += l.px * 1.2;
+    }
+    tex.update();
+
+    const mat = new StandardMaterial(`mat_${nombre}`, this.scene);
+    mat.diffuseTexture = tex;
+    mat.emissiveColor = new Color3(0.55, 0.55, 0.55);
+    mat.specularColor = Color3.Black();
+    mat.backFaceCulling = true;
+
+    for (const lado of [0, 1]) {
+      const p = MeshBuilder.CreatePlane(`${nombre}_${lado}`, { width: ancho, height: alto }, this.scene);
+      p.position.copyFrom(pos);
+      p.position.z += lado === 0 ? -0.006 : 0.006;
+      p.rotation.x = rotX;
+      p.rotation.y = lado === 0 ? 0 : Math.PI;
+      p.material = mat;
+      p.parent = this.root;
+      p.isPickable = false;
+    }
+  }
+
+  /** Rótulos grandes encima de cada control para que su función sea evidente. */
+  private construirRotulosIntuitivos(): void {
+    // Panel trasero elevado con título general
+    this.crearRotulo("rotuloTitulo", 1.5, 0.22, new Vector3(0, 1.92, 0.10), "#14532d", "#4ade80", [
+      { txt: "🌦️ MESA DEL CLIMA", px: 30, color: "#fef08a" },
+    ]);
+    this.crearRotulo("rotuloAyuda", 1.5, 0.16, new Vector3(0, 1.74, 0.10), "#1e293b", "#94a3b8", [
+      { txt: "1) Elige el clima  2) ¡Ve al campo!", px: 20, color: "#e2e8f0" },
+    ]);
+
+    // Etiquetas flotantes sobre cada control (sobre la mesa, legibles de frente y de espaldas)
+    const alturaRot = 1.62;
+    this.crearRotulo("rotuloTemp", 0.34, 0.14, new Vector3(-0.75, alturaRot, -0.15), "#7c2d12", "#fb923c", [
+      { txt: "🌡️ CALOR", px: 24, color: "#ffedd5" },
+    ]);
+    this.crearRotulo("rotuloLluvia", 0.34, 0.14, new Vector3(-0.35, 1.30, -0.15), "#075985", "#38bdf8", [
+      { txt: "🌧️ LLUVIA", px: 24, color: "#e0f2fe" },
+    ]);
+    this.crearRotulo("rotuloViento", 0.34, 0.14, new Vector3(0.35, 1.30, -0.15), "#115e59", "#5eead4", [
+      { txt: "💨 VIENTO", px: 24, color: "#ccfbf1" },
+    ]);
+    this.crearRotulo("rotuloSuelo", 0.52, 0.14, new Vector3(0.82, 1.20, -0.15), "#713f12", "#facc15", [
+      { txt: "🧪 SUELO (pH)", px: 22, color: "#fef9c3" },
+    ]);
+
+    // Símbolos + y − sobre los botones del termómetro
+    this.crearRotulo("rotuloMas", 0.10, 0.10, new Vector3(-0.60, 1.40, -0.20), "#991b1b", "#fca5a5", [
+      { txt: "+", px: 48, color: "#ffffff" },
+    ]);
+    this.crearRotulo("rotuloMenos", 0.10, 0.10, new Vector3(-0.60, 0.95, -0.20), "#075985", "#7dd3fc", [
+      { txt: "−", px: 48, color: "#ffffff" },
+    ]);
+
+    // Indicaciones de la palanca (posiciones) y del viento
+    this.crearRotulo("rotuloPalancaGuia", 0.46, 0.09, new Vector3(-0.35, 0.80, -0.30), "#0f172a", "#38bdf8", [
+      { txt: "Clic: ☀️ → 🌦️ → ⛈️", px: 18, color: "#bae6fd" },
+    ], 0);
+    this.crearRotulo("rotuloVientoGuia", 0.46, 0.09, new Vector3(0.35, 0.80, -0.30), "#0f172a", "#5eead4", [
+      { txt: "Clic: calma → brisa → fuerte", px: 15, color: "#99f6e4" },
+    ]);
+    this.crearRotulo("rotuloSueloGuia", 0.52, 0.09, new Vector3(0.82, 0.80, -0.30), "#0f172a", "#facc15", [
+      { txt: "Elige 1 tierra: rojo=ácido", px: 15, color: "#fef08a" },
+    ]);
   }
 
   private construirMesaMadera(shadowGen: ShadowGenerator | null): void {
     const woodMat = new StandardMaterial("matMesaClima", this.scene);
-    woodMat.diffuseColor = Color3.FromHexString("#78350f");
-    woodMat.emissiveColor = Color3.FromHexString("#451a03").scale(0.35);
+    woodMat.diffuseTexture = crearTexMaderaPixel(this.scene, false, 3, 2);
+    woodMat.diffuseColor = Color3.FromHexString("#dfb88b");
+    woodMat.emissiveColor = Color3.FromHexString("#3f1d08").scale(0.30);
 
-    // Tablón superior
+    // Tablón superior pixel-art
     this.mesaMesh = MeshBuilder.CreateBox("tablonMesa", {
       width: 2.20,
       height: 0.12,
@@ -89,11 +190,8 @@ export class MesaClimaPrejuego {
     this.mesaMesh.position.set(0, 0.85, 0);
     this.mesaMesh.material = woodMat;
     this.mesaMesh.parent = this.root;
-    this.mesaMesh.renderOutline = true;
-    this.mesaMesh.outlineWidth = 0.018;
-    this.mesaMesh.outlineColor = Color3.FromHexString("#25330f");
 
-    // 4 Patas
+    // 4 Patas cuadradas tipo voxel
     const posPatas = [
       [-0.95, -0.45],
       [0.95, -0.45],
@@ -102,17 +200,14 @@ export class MesaClimaPrejuego {
     ];
     for (let i = 0; i < posPatas.length; i++) {
       const [x, z] = posPatas[i];
-      const pata = MeshBuilder.CreateCylinder(`pataMesa_${i}`, {
-        diameter: 0.08,
+      const pata = MeshBuilder.CreateBox(`pataMesa_${i}`, {
+        width: 0.10,
         height: 0.85,
-        tessellation: 12
+        depth: 0.10
       }, this.scene);
       pata.position.set(x, 0.425, z);
       pata.material = woodMat;
       pata.parent = this.root;
-      pata.renderOutline = true;
-      pata.outlineWidth = 0.012;
-      pata.outlineColor = Color3.FromHexString("#25330f");
     }
 
     if (shadowGen) {
@@ -328,23 +423,22 @@ export class MesaClimaPrejuego {
    * Orbe Holográfico 3D de Pronóstico y Dificultad
    */
   private construirOrbePronostico(): void {
-    // Esfera luminosa
+    // Cristal voxel luminoso
     const orbeMat = new StandardMaterial("matOrbe", this.scene);
     orbeMat.diffuseColor = Color3.FromHexString("#fef08a");
-    orbeMat.emissiveColor = Color3.FromHexString("#eab308").scale(0.5);
+    orbeMat.emissiveColor = Color3.FromHexString("#eab308").scale(0.55);
 
-    this.orbeMesh = MeshBuilder.CreateSphere("orbeHolograma", { diameter: 0.32, segments: 16 }, this.scene);
+    this.orbeMesh = MeshBuilder.CreateBox("orbeHolograma", { size: 0.28 }, this.scene);
     this.orbeMesh.position.set(0, 1.25, 0.10);
+    this.orbeMesh.rotation.y = Math.PI / 4;
     this.orbeMesh.material = orbeMat;
     this.orbeMesh.parent = this.root;
-    this.orbeMesh.renderOutline = true;
-    this.orbeMesh.outlineWidth = 0.015;
-    this.orbeMesh.outlineColor = Color3.FromHexString("#ca8a04");
 
-    // Letrero holográfico 3D con la dificultad y predicción
+    // Letrero holográfico 3D pixel-art con la dificultad y predicción
     const W = 320;
     const H = 160;
-    this.orbeTex = new DynamicTexture("texOrbePronostico", { width: W, height: H }, this.scene, true);
+    this.orbeTex = new DynamicTexture("texOrbePronostico", { width: W, height: H }, this.scene, false, Texture.NEAREST_SAMPLINGMODE);
+    configurarSamplingPixel(this.orbeTex);
 
     const boardMat = new StandardMaterial("matBoardOrbe", this.scene);
     boardMat.diffuseTexture = this.orbeTex;
@@ -354,9 +448,6 @@ export class MesaClimaPrejuego {
     board.position.set(0, 1.55, 0.10);
     board.material = boardMat;
     board.parent = this.root;
-    board.renderOutline = true;
-    board.outlineWidth = 0.015;
-    board.outlineColor = Color3.FromHexString("#25330f");
 
     this.actualizarOrbe();
   }
@@ -384,30 +475,25 @@ export class MesaClimaPrejuego {
     const W = 320;
     const H = 160;
 
-    ctx.fillStyle = "#fffdf0";
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.strokeStyle = "#854d0e";
-    ctx.lineWidth = 5;
-    ctx.strokeRect(3, 3, W - 6, H - 6);
+    dibujarMarcoLetreroPixel(ctx, W, H, "#fffdf0", "#451a03", "#d97706", 4);
 
     ctx.fillStyle = "#1e293b";
-    ctx.font = "bold 18px 'Pixelify Sans', 'Trebuchet MS', sans-serif";
+    ctx.font = "bold 18px 'Pixelify Sans', monospace";
     ctx.fillText("🔮 Pronóstico del Valle", 14, 26);
 
-    ctx.font = "bold 13px 'Pixelify Sans', 'Trebuchet MS', sans-serif";
+    ctx.font = "bold 13px 'Pixelify Sans', monospace";
     ctx.fillStyle = "#b45309";
     this.dibujarTextoAjustado(ctx, this.nombreReto, 14, 48, W - 28, 16);
 
     ctx.fillStyle = "#0284c7";
-    ctx.font = "12px 'Pixelify Sans', 'Trebuchet MS', sans-serif";
+    ctx.font = "12px 'Pixelify Sans', monospace";
     ctx.fillText(`🌡️ Temp: ${Math.round(this.clima.temperatura)}°C | 💧 Lluvia: ${Math.round(this.clima.lluvia)} mm/h`, 14, 88);
     ctx.fillText(`💨 Viento: ${Math.round(this.clima.viento)} m/s | 🌍 pH: ${this.clima.phSuelo.toFixed(1)}`, 14, 110);
 
     // Estrellas de dificultad
     const estrellas = "⭐".repeat(this.nivelDificultad);
     ctx.fillStyle = "#eab308";
-    ctx.font = "bold 14px 'Pixelify Sans', 'Trebuchet MS', sans-serif";
+    ctx.font = "bold 14px 'Pixelify Sans', monospace";
     ctx.fillText(`Dificultad: ${estrellas}`, 14, 138);
 
     this.orbeTex.update();
@@ -469,13 +555,13 @@ export class MesaClimaPrejuego {
     this.btnIniciarCampo.outlineWidth = 0.018;
     this.btnIniciarCampo.outlineColor = Color3.FromHexString("#25330f");
 
-    // Rótulo sobre el botón
-    const texBtn = new DynamicTexture("texBtnIniciar", { width: 256, height: 64 }, this.scene, true);
+    // Rótulo pixel-art sobre el botón
+    const texBtn = new DynamicTexture("texBtnIniciar", { width: 256, height: 64 }, this.scene, false, Texture.NEAREST_SAMPLINGMODE);
+    configurarSamplingPixel(texBtn);
     const ctx = texBtn.getContext() as any;
-    ctx.fillStyle = "#15803d";
-    ctx.fillRect(0, 0, 256, 64);
+    dibujarMarcoLetreroPixel(ctx, 256, 64, "#15803d", "#052e16", "#4ade80", 3);
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 20px Trebuchet MS, sans-serif";
+    ctx.font = "bold 20px 'Pixelify Sans', monospace";
     ctx.fillText("🌱 ¡IR AL CAMPO!", 42, 40);
     texBtn.update();
 

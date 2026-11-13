@@ -292,11 +292,11 @@ export class CodiceMaiz {
         modal.id = 'codiceMaizModal';
         modal.style.cssText = `
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(28, 22, 14, 0.97); color: #fef3c7;
-            border: 2px solid #eab308; border-radius: 16px;
+            background: rgba(24, 19, 12, 0.96); color: #fef3c7;
+            border: 4px solid; border-color: #fde047 #854d0e #854d0e #fde047; border-radius: 0;
             padding: 20px 24px; width: min(580px, 95vw); max-height: 82vh; overflow-y: auto;
-            z-index: 2500; font-family: system-ui, sans-serif; display: none;
-            box-shadow: 0 20px 55px rgba(0,0,0,0.88);
+            z-index: 2500; font-family: var(--fuente-px); display: none;
+            box-shadow: 0 0 0 4px #000000;
         `;
         document.body.appendChild(modal);
         this.modalEl = modal;
@@ -318,7 +318,7 @@ export class CodiceMaiz {
             .map((e) => {
                 if (!e.desbloqueada) {
                     return `
-                        <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:10px;border:1px dashed rgba(255,255,255,0.15);opacity:0.65;">
+                        <div style="background:rgba(255,255,255,0.04);padding:10px;border-radius:0;border:2px dashed rgba(255,255,255,0.18);opacity:0.65;">
                             <div style="font-size:0.8rem;color:#a8a29e;">${e.categoria}</div>
                             <div style="font-weight:700;margin:3px 0;">🔒 Entrada por descubrir</div>
                             <div style="font-size:0.78rem;color:#78716c;">Explora la milpa, poliniza, cocina o avanza el calendario para desbloquear.</div>
@@ -326,7 +326,7 @@ export class CodiceMaiz {
                     `;
                 }
                 return `
-                    <div style="background:rgba(234,179,8,0.12);padding:10px 12px;border-radius:10px;border:1px solid rgba(234,179,8,0.4);">
+                    <div style="background:rgba(234,179,8,0.12);padding:10px 12px;border-radius:0;border:2px solid rgba(234,179,8,0.45);">
                         <div style="font-size:0.76rem;color:#fbbf24;text-transform:uppercase;letter-spacing:0.5px;">${e.categoria}</div>
                         <div style="font-weight:700;font-size:0.95rem;margin:3px 0;color:#fef08a;">${e.icono} ${e.titulo}</div>
                         <div style="font-size:0.82rem;line-height:1.38;color:#fde68a;">${e.resumen}</div>
@@ -336,12 +336,12 @@ export class CodiceMaiz {
             .join('');
 
         this.modalEl.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:2px solid #854d0e;padding-bottom:6px;">
                 <div>
                     <h3 style="margin:0;color:#facc15;font-size:1.2rem;">📖 Códice Ilustrado del Maíz y la Milpa</h3>
                     <span style="font-size:0.82rem;color:#fcd34d;">Saberes desbloqueados: <b>${desbloqueadas} / ${this.entradas.length}</b></span>
                 </div>
-                <button id="btnCerrarCodice" style="background:none;border:none;color:#fde68a;font-size:1.3rem;cursor:pointer;">✕</button>
+                <button id="btnCerrarCodice" style="background:#dc2626;border:2px solid;border-color:#fca5a5 #7f1d1d #7f1d1d #fca5a5;border-radius:0;color:#fff;font-size:1rem;cursor:pointer;padding:2px 8px;font-weight:700;">✕</button>
             </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:10px;">
                 ${tarjetas}

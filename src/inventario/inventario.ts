@@ -5,6 +5,8 @@
  * y calidad de grano/mazorca, eventos reactivos y persistencia.
  */
 
+import { TipoSemilla } from "../nucleo";
+
 export type CategoriaItem = "herramienta" | "cosecha" | "semilla" | "insumo";
 
 export interface DefItem {
@@ -121,8 +123,64 @@ export const DEFS: Record<string, DefItem> = {
     maxStack: 64,
     categoria: "semilla",
     descripcion: "Cubre el suelo conservando la humedad y controlando malezas"
+  },
+  semilla_chalqueno: {
+    id: "semilla_chalqueno",
+    nombre: "Semilla Maíz Chalqueño",
+    icono: "grano_chalqueno",
+    maxStack: 64,
+    categoria: "semilla",
+    descripcion: "Raza nativa de grano dorado y gran vigor; siembra en cualquier casilla"
+  },
+  semilla_azul: {
+    id: "semilla_azul",
+    nombre: "Semilla Maíz Azul",
+    icono: "grano_azul",
+    maxStack: 64,
+    categoria: "semilla",
+    descripcion: "Raza cónica rica en antocianinas y tolerancia al frío"
+  },
+  semilla_rojo: {
+    id: "semilla_rojo",
+    nombre: "Semilla Maíz Rojo",
+    icono: "grano_rojo",
+    maxStack: 64,
+    categoria: "semilla",
+    descripcion: "Sangre de Cristo: ciclo rápido resistente a sequía moderada"
+  },
+  semilla_palomero: {
+    id: "semilla_palomero",
+    nombre: "Semilla Palomero Toluqueño",
+    icono: "grano_palomero",
+    maxStack: 64,
+    categoria: "semilla",
+    descripcion: "Raza antigua de altiplano frío con espigas ramificadas"
   }
 };
+
+export const MAPA_ITEM_VARIEDAD: Record<string, TipoSemilla> = {
+  semilla_chalqueno: "chalqueno",
+  semilla_azul: "azul",
+  semilla_rojo: "rojo",
+  semilla_palomero: "palomero"
+};
+
+export function variedadDeItemId(id: string): TipoSemilla | undefined {
+  return MAPA_ITEM_VARIEDAD[id];
+}
+
+export function itemIdSemillaPorVariedad(v: TipoSemilla): string {
+  switch (v) {
+    case "azul":
+      return "semilla_azul";
+    case "rojo":
+      return "semilla_rojo";
+    case "palomero":
+      return "semilla_palomero";
+    default:
+      return "semilla_chalqueno";
+  }
+}
 
 export const tierCalidad = (c = 0.5): number => (c >= 0.85 ? 2 : c >= 0.6 ? 1 : 0);
 
@@ -199,6 +257,43 @@ export class Inventario {
       }
     }
     return total;
+  }
+
+  contar(id: string): number {
+    return this.cuenta(id);
+  }
+
+  agregar(stack: ItemStack): { sobrante: number } {
+    return { sobrante: this.anadir(stack) };
+  }
+
+  consumirUno(slotIndex: number): boolean {
+    const s = this.slots[slotIndex];
+    if (!s || s.cantidad <= 0) return false;
+    s.cantidad -= 1;
+    if (s.cantidad <= 0) {
+      this.slots[slotIndex] = null;
+    }
+    this.notificar();
+    return true;
+  }
+
+  consumirPorId(id: string, cantidad = 1): boolean {
+    if (this.cuenta(id) < cantidad) return false;
+    let pendiente = cantidad;
+    for (let i = 0; i < this.slots.length && pendiente > 0; i++) {
+      const s = this.slots[i];
+      if (s && s.id === id && s.cantidad > 0) {
+        const tomar = Math.min(s.cantidad, pendiente);
+        s.cantidad -= tomar;
+        pendiente -= tomar;
+        if (s.cantidad <= 0) {
+          this.slots[i] = null;
+        }
+      }
+    }
+    this.notificar();
+    return true;
   }
 
   cuentaPorVariedad(id: string, variedad: string): number {

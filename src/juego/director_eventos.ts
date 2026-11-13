@@ -194,11 +194,11 @@ export class DirectorEventos {
             case 'helada':
                 return `${prefijo}: ¡Helada nocturna! Coloca Petate protector [G] sobre tus plantas jóvenes.`;
             case 'tormenta':
-                return `${prefijo}: ¡Tormenta torrencial! Usa la Azada [1] en estaciones encharcadas para abrir zanja de drenaje.`;
+                return `${prefijo}: ¡Tormenta torrencial! Usa la Azada [2] en estaciones encharcadas para abrir zanja de drenaje.`;
             case 'vendaval':
                 return `${prefijo}: ¡Vendaval de montaña! Coloca Estaca Tutora [T] o siembra Frijol [B] para sostener el tallo.`;
             case 'sequia':
-                return `${prefijo}: ¡Onda cálida de sequía! Riega tus plantas [3] y aprovecha la sombra de la Calabaza [N].`;
+                return `${prefijo}: ¡Onda cálida de sequía! Riega tus plantas [4] y aprovecha la sombra de la Calabaza [9]/[N].`;
         }
     }
 

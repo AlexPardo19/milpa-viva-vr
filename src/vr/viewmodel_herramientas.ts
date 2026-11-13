@@ -1,9 +1,9 @@
 /**
- * Modelo en Primera Persona de Herramientas y Manos (Viewmodel FPS)
+ * Modelo en Primera Persona Voxel / Pixel-Art de Herramientas y Mano (Viewmodel FPS)
  *
- * Renderiza la herramienta equipada directamente en el campo de visión del jugador
- * con balanceo natural al caminar (weapon bobbing), balanceo de respiración (idle sway)
- * y animaciones dinámicas de impacto (blandir azada, inclinar regadera, sembrar y cosechar).
+ * Encuadrado en la esquina inferior derecha estilo Minecraft para mantener
+ * despejado el centro de visión, con geometría modular voxel, balanceo natural
+ * y soporte completo para todas las herramientas y semillas de la hotbar.
  */
 
 import {
@@ -27,27 +27,36 @@ export class ViewmodelHerramientas {
   readonly audio: AudioSintetizador;
   readonly particulas: ParticulasEducativas;
 
-  // Nodos de herramientas individuales
+  // Nodos individuales por ítem/herramienta
   private nodoManos!: TransformNode;
-  private manoIzqVM!: TransformNode;
   private manoDerVM!: TransformNode;
   private nodoAzada!: TransformNode;
   private nodoSemillas!: TransformNode;
+  private nodoSemillaChalqueno!: TransformNode;
+  private nodoSemillaAzul!: TransformNode;
+  private nodoSemillaRojo!: TransformNode;
+  private nodoSemillaPalomero!: TransformNode;
   private nodoRegadera!: TransformNode;
   private nodoAbono!: TransformNode;
+  private nodoSol!: TransformNode;
   private nodoCosecha!: TransformNode;
+  private nodoFrijol!: TransformNode;
+  private nodoCalabaza!: TransformNode;
+
+  // Caché de materiales reutilizables
+  private matCache = new Map<string, StandardMaterial>();
 
   // Estado
-  public herramientaActual: HerramientaTipo = "azada";
+  public herramientaActual: HerramientaTipo = "mano";
   public estaAnimando = false;
   private tiempoIdle = 0;
   private animacionProgreso = 0;
   private tipoAnimacion: HerramientaTipo | null = null;
   private onImpactoCallback: (() => void) | null = null;
 
-  // Posiciones de reposo relativas a la cámara
-  private readonly POS_REPOSO = new Vector3(0.24, -0.16, 0.52);
-  private readonly ROT_REPOSO = new Vector3(0.08, -0.12, -0.05);
+  // Posición de reposo inferior-derecha estilo Minecraft (sin invadir la retícula)
+  private readonly POS_REPOSO = new Vector3(0.32, -0.26, 0.45);
+  private readonly ROT_REPOSO = new Vector3(0.10, -0.32, -0.06);
 
   constructor(
     scene: Scene,
@@ -66,237 +75,312 @@ export class ViewmodelHerramientas {
     this.root.rotation.copyFrom(this.ROT_REPOSO);
 
     this.construirModelos();
-    this.equipar("azada");
+    this.equipar("mano");
   }
 
-  private mat(hex: string, em = 0.45): StandardMaterial {
-    const m = new StandardMaterial(`matVM_${hex}_${Math.random()}`, this.scene);
+  private mat(hex: string, em = 0.24): StandardMaterial {
+    const key = `${hex}_${em.toFixed(2)}`;
+    const existente = this.matCache.get(key);
+    if (existente) return existente;
+
+    const m = new StandardMaterial(`matVM_${key}`, this.scene);
     const c = Color3.FromHexString(hex);
     m.diffuseColor = c;
     m.emissiveColor = c.scale(em);
-    m.specularColor = new Color3(0.04, 0.04, 0.04);
+    m.specularColor = new Color3(0.03, 0.03, 0.03);
+    this.matCache.set(key, m);
     return m;
   }
 
-  private ink(mesh: Mesh, width = 0.012, colHex = "#25330f"): void {
+  private ink(mesh: Mesh, width = 0.0035, colHex = "#1a240a"): void {
     mesh.renderOutline = true;
     mesh.outlineWidth = width;
     mesh.outlineColor = Color3.FromHexString(colHex);
+    mesh.isPickable = false;
+  }
+
+  private crearBrazoPixelBase(parent: TransformNode, prefijo: string): void {
+    const manga = MeshBuilder.CreateBox(
+      `${prefijo}_manga`,
+      { width: 0.085, height: 0.085, depth: 0.14 },
+      this.scene
+    );
+    manga.position.set(0.02, -0.06, -0.02);
+    manga.rotation.set(0.18, -0.1, 0);
+    manga.material = this.mat("#15803d", 0.25);
+    manga.parent = parent;
+    this.ink(manga);
+
+    const puno = MeshBuilder.CreateBox(
+      `${prefijo}_puno`,
+      { width: 0.088, height: 0.088, depth: 0.024 },
+      this.scene
+    );
+    puno.position.set(0.015, -0.04, 0.055);
+    puno.rotation.set(0.18, -0.1, 0);
+    puno.material = this.mat("#fbbf24", 0.28);
+    puno.parent = parent;
+    this.ink(puno);
+
+    const palma = MeshBuilder.CreateBox(
+      `${prefijo}_palma`,
+      { width: 0.072, height: 0.072, depth: 0.11 },
+      this.scene
+    );
+    palma.position.set(0.01, -0.015, 0.115);
+    palma.rotation.set(0.18, -0.1, 0);
+    palma.material = this.mat("#fdba74", 0.26);
+    palma.parent = parent;
+    this.ink(palma);
+  }
+
+  private crearBolsaPixel(
+    nombreNodo: string,
+    colorBolsa: string,
+    colorContenido: string,
+    tamGrano = 0.028,
+    colorCinta?: string
+  ): TransformNode {
+    const nodo = new TransformNode(nombreNodo, this.scene);
+    nodo.parent = this.root;
+    this.crearBrazoPixelBase(nodo, nombreNodo);
+
+    const bolsa = MeshBuilder.CreateBox(
+      `vm_${nombreNodo}_bolsa`,
+      { width: 0.095, height: 0.105, depth: 0.075 },
+      this.scene
+    );
+    bolsa.position.set(-0.005, 0.045, 0.155);
+    bolsa.material = this.mat(colorBolsa, 0.26);
+    bolsa.parent = nodo;
+    this.ink(bolsa);
+
+    if (colorCinta) {
+      const banda = MeshBuilder.CreateBox(
+        `vm_${nombreNodo}_banda`,
+        { width: 0.101, height: 0.032, depth: 0.081 },
+        this.scene
+      );
+      banda.position.set(-0.005, 0.045, 0.155);
+      banda.material = this.mat(colorCinta, 0.34);
+      banda.parent = nodo;
+      this.ink(banda, 0.0024);
+    }
+
+    const boca = MeshBuilder.CreateBox(
+      `vm_${nombreNodo}_boca`,
+      { width: 0.078, height: 0.024, depth: 0.058 },
+      this.scene
+    );
+    boca.position.set(-0.005, 0.105, 0.155);
+    boca.material = this.mat("#78350f", 0.24);
+    boca.parent = nodo;
+    this.ink(boca, 0.003);
+
+    const offsets = [
+      [-0.018, 0.12, 0.142],
+      [0.014, 0.126, 0.154],
+      [-0.003, 0.132, 0.172],
+      [0.012, 0.118, 0.135]
+    ];
+    offsets.forEach(([ox, oy, oz], idx) => {
+      const p = MeshBuilder.CreateBox(
+        `vm_${nombreNodo}_grano_${idx}`,
+        { size: tamGrano },
+        this.scene
+      );
+      p.position.set(ox, oy, oz);
+      p.material = this.mat(colorContenido, 0.36);
+      p.parent = nodo;
+      this.ink(p, 0.0025);
+    });
+
+    return nodo;
   }
 
   private construirModelos(): void {
-    // 1. AZADA EN PRIMERA PERSONA
+    // 1. MANOS LIBRES (brazo voxel estilo Minecraft)
+    this.nodoManos = new TransformNode("vmManosLibres", this.scene);
+    this.nodoManos.parent = this.root;
+    this.manoDerVM = new TransformNode("vmManoLibreDer", this.scene);
+    this.manoDerVM.parent = this.nodoManos;
+    this.crearBrazoPixelBase(this.manoDerVM, "vmMano");
+
+    // 2. AZADA CAMPESINA VOXEL (compacta en esquina inferior derecha)
     this.nodoAzada = new TransformNode("vmAzada", this.scene);
     this.nodoAzada.parent = this.root;
+    this.crearBrazoPixelBase(this.nodoAzada, "vmAzada");
 
-    const mango = MeshBuilder.CreateCylinder("vmMangoAzada", { height: 1.1, diameter: 0.045 }, this.scene);
-    mango.rotation.x = Math.PI / 3.0;
-    mango.rotation.z = -0.15;
-    mango.position.set(0, 0.15, 0.22);
-    mango.material = this.mat("#bfa052", 0.5);
-    mango.parent = this.nodoAzada;
+    const pivoteAzada = new TransformNode("vmAzadaPivote", this.scene);
+    pivoteAzada.parent = this.nodoAzada;
+    pivoteAzada.position.set(-0.01, 0.015, 0.15);
+    pivoteAzada.rotation.set(0.45, 0.08, 0.08);
+
+    const mango = MeshBuilder.CreateBox(
+      "vmMangoAzada",
+      { width: 0.026, height: 0.34, depth: 0.026 },
+      this.scene
+    );
+    mango.position.set(0, 0.11, 0.04);
+    mango.material = this.mat("#a16207", 0.24);
+    mango.parent = pivoteAzada;
     this.ink(mango);
 
-    const conector = MeshBuilder.CreateCylinder("vmConectorAzada", { height: 0.10, diameter: 0.065 }, this.scene);
-    conector.rotation.x = Math.PI / 3.0;
-    conector.rotation.z = -0.15;
-    conector.position.set(-0.06, 0.52, 0.58);
-    conector.material = this.mat("#334155", 0.5);
-    conector.parent = this.nodoAzada;
-    this.ink(conector);
+    const cabezal = MeshBuilder.CreateBox(
+      "vmConectorAzada",
+      { width: 0.042, height: 0.036, depth: 0.042 },
+      this.scene
+    );
+    cabezal.position.set(0, 0.27, 0.04);
+    cabezal.material = this.mat("#334155", 0.26);
+    cabezal.parent = pivoteAzada;
+    this.ink(cabezal);
 
-    const hoja = MeshBuilder.CreateBox("vmHojaAzada", { width: 0.28, height: 0.20, depth: 0.025 }, this.scene);
-    hoja.position.set(-0.06, 0.52, 0.64);
-    hoja.rotation.x = Math.PI / 1.5;
-    hoja.rotation.y = -0.25;
-    hoja.rotation.z = 0.2;
-    hoja.material = this.mat("#cbd5e1", 0.7);
-    hoja.parent = this.nodoAzada;
-    this.ink(hoja, 0.015);
+    const hoja = MeshBuilder.CreateBox(
+      "vmHojaAzada",
+      { width: 0.045, height: 0.024, depth: 0.13 },
+      this.scene
+    );
+    hoja.position.set(0, 0.26, 0.11);
+    hoja.rotation.x = 0.22;
+    hoja.material = this.mat("#94a3b8", 0.28);
+    hoja.parent = pivoteAzada;
+    this.ink(hoja);
 
-    // Dos manos caricaturescas envolviendo el mango
-    const mano1 = MeshBuilder.CreateSphere("vmManoAzada1", { diameterX: 0.10, diameterY: 0.08, diameterZ: 0.12 }, this.scene);
-    mano1.position.set(0.02, 0.02, 0.10);
-    mano1.material = this.mat("#fed7aa", 0.6);
-    mano1.parent = this.nodoAzada;
-    this.ink(mano1);
+    const filo = MeshBuilder.CreateBox(
+      "vmFiloAzada",
+      { width: 0.047, height: 0.032, depth: 0.026 },
+      this.scene
+    );
+    filo.position.set(0, 0.238, 0.165);
+    filo.material = this.mat("#cbd5e1", 0.32);
+    filo.parent = pivoteAzada;
+    this.ink(filo);
 
-    const mano2 = MeshBuilder.CreateSphere("vmManoAzada2", { diameterX: 0.09, diameterY: 0.08, diameterZ: 0.11 }, this.scene);
-    mano2.position.set(-0.02, 0.25, 0.32);
-    mano2.material = this.mat("#fed7aa", 0.6);
-    mano2.parent = this.nodoAzada;
-    this.ink(mano2);
+    // 3. BOLSAS DE SEMILLAS DE MAÍZ VOXEL (distintas razas con banda de color y granos)
+    this.nodoSemillas = this.crearBolsaPixel("vmSemillas", "#d6b888", "#fbbf24", 0.030, "#eab308");
+    this.nodoSemillaChalqueno = this.crearBolsaPixel(
+      "vmSemillaChalqueno",
+      "#d6b888",
+      "#fef08a",
+      0.032,
+      "#eab308"
+    );
+    this.nodoSemillaAzul = this.crearBolsaPixel(
+      "vmSemillaAzul",
+      "#d6b888",
+      "#4f46e5",
+      0.030,
+      "#312e81"
+    );
+    this.nodoSemillaRojo = this.crearBolsaPixel(
+      "vmSemillaRojo",
+      "#d6b888",
+      "#ef4444",
+      0.030,
+      "#991b1b"
+    );
+    this.nodoSemillaPalomero = this.crearBolsaPixel(
+      "vmSemillaPalomero",
+      "#d6b888",
+      "#fef3c7",
+      0.026,
+      "#d97706"
+    );
 
-    // 2. BOLSA DE SEMILLAS
-    this.nodoSemillas = new TransformNode("vmSemillas", this.scene);
-    this.nodoSemillas.parent = this.root;
-
-    const saco = MeshBuilder.CreateSphere("vmSacoSemillas", { diameterX: 0.18, diameterY: 0.22, diameterZ: 0.18 }, this.scene);
-    saco.position.set(0.04, 0.14, 0.32);
-    saco.material = this.mat("#d97706", 0.6);
-    saco.parent = this.nodoSemillas;
-    this.ink(saco);
-
-    // Semillas asomándose
-    const granos = MeshBuilder.CreateSphere("vmGranosAsomados", { diameter: 0.08 }, this.scene);
-    granos.position.set(0.04, 0.24, 0.32);
-    granos.material = this.mat("#fbbf24", 0.75);
-    granos.parent = this.nodoSemillas;
-    this.ink(granos);
-
-    const manoSaco = MeshBuilder.CreateSphere("vmManoSaco", { diameterX: 0.10, diameterY: 0.08, diameterZ: 0.11 }, this.scene);
-    manoSaco.position.set(0.04, 0.05, 0.28);
-    manoSaco.material = this.mat("#fed7aa", 0.6);
-    manoSaco.parent = this.nodoSemillas;
-    this.ink(manoSaco);
-
-    // 3. REGADERA METÁLICA
+    // 4. REGADERA VOXEL PIXEL-ART
     this.nodoRegadera = new TransformNode("vmRegadera", this.scene);
     this.nodoRegadera.parent = this.root;
+    this.crearBrazoPixelBase(this.nodoRegadera, "vmReg");
 
-    const cuerpoReg = MeshBuilder.CreateCylinder("vmCuerpoReg", { height: 0.22, diameter: 0.16 }, this.scene);
-    cuerpoReg.position.set(0.02, 0.06, 0.26);
-    cuerpoReg.material = this.mat("#0284c7", 0.65);
+    const cuerpoReg = MeshBuilder.CreateBox(
+      "vmCuerpoReg",
+      { width: 0.11, height: 0.115, depth: 0.12 },
+      this.scene
+    );
+    cuerpoReg.position.set(-0.01, 0.04, 0.17);
+    cuerpoReg.material = this.mat("#0284c7", 0.28);
     cuerpoReg.parent = this.nodoRegadera;
     this.ink(cuerpoReg);
 
-    const canoReg = MeshBuilder.CreateCylinder("vmCanoReg", { height: 0.22, diameterTop: 0.035, diameterBottom: 0.05 }, this.scene);
-    canoReg.position.set(-0.06, 0.14, 0.38);
-    canoReg.rotation.x = -Math.PI / 3.8;
-    canoReg.rotation.y = -Math.PI / 8;
-    canoReg.material = this.mat("#0284c7", 0.65);
+    const asaReg = MeshBuilder.CreateBox(
+      "vmAsaReg",
+      { width: 0.024, height: 0.075, depth: 0.07 },
+      this.scene
+    );
+    asaReg.position.set(-0.01, 0.115, 0.14);
+    asaReg.material = this.mat("#0369a1", 0.26);
+    asaReg.parent = this.nodoRegadera;
+    this.ink(asaReg);
+
+    const canoReg = MeshBuilder.CreateBox(
+      "vmCanoReg",
+      { width: 0.028, height: 0.028, depth: 0.11 },
+      this.scene
+    );
+    canoReg.position.set(-0.03, 0.065, 0.25);
+    canoReg.rotation.x = -0.45;
+    canoReg.material = this.mat("#38bdf8", 0.3);
     canoReg.parent = this.nodoRegadera;
     this.ink(canoReg);
 
-    const rosetaReg = MeshBuilder.CreateSphere("vmRosetaReg", { diameter: 0.075 }, this.scene);
-    rosetaReg.position.set(-0.11, 0.22, 0.46);
-    rosetaReg.material = this.mat("#facc15", 0.75);
+    const rosetaReg = MeshBuilder.CreateBox(
+      "vmRosetaReg",
+      { width: 0.046, height: 0.046, depth: 0.028 },
+      this.scene
+    );
+    rosetaReg.position.set(-0.03, 0.095, 0.305);
+    rosetaReg.rotation.x = -0.45;
+    rosetaReg.material = this.mat("#eab308", 0.34);
     rosetaReg.parent = this.nodoRegadera;
     this.ink(rosetaReg);
 
-    // 4. ABONO ORGÁNICO
-    this.nodoAbono = new TransformNode("vmAbono", this.scene);
-    this.nodoAbono.parent = this.root;
+    // 5. ABONO ORGÁNICO VOXEL
+    this.nodoAbono = this.crearBolsaPixel("vmAbono", "#15803d", "#5c3416", 0.036);
 
-    const sacoAbono = MeshBuilder.CreateBox("vmSacoAbono", { width: 0.18, height: 0.22, depth: 0.12 }, this.scene);
-    sacoAbono.position.set(0.03, 0.08, 0.24);
-    sacoAbono.material = this.mat("#15803d", 0.6);
-    sacoAbono.parent = this.nodoAbono;
-    this.ink(sacoAbono);
+    // 6. AMULETO DE ENERGÍA SOLAR (+15 DÍAS)
+    this.nodoSol = new TransformNode("vmSol", this.scene);
+    this.nodoSol.parent = this.root;
+    this.crearBrazoPixelBase(this.nodoSol, "vmSol");
 
-    const humus = MeshBuilder.CreateSphere("vmHumusAbono", { diameter: 0.12 }, this.scene);
-    humus.position.set(0.03, 0.19, 0.24);
-    humus.material = this.mat("#451a03", 0.7);
-    humus.parent = this.nodoAbono;
-    this.ink(humus);
+    const solCentro = MeshBuilder.CreateBox(
+      "vmSolNucleo",
+      { width: 0.085, height: 0.085, depth: 0.032 },
+      this.scene
+    );
+    solCentro.position.set(-0.01, 0.06, 0.17);
+    solCentro.material = this.mat("#f59e0b", 0.42);
+    solCentro.parent = this.nodoSol;
+    this.ink(solCentro);
 
-    // 5. GUANTELETE / MANO LIBRE DE COSECHA
+    const solCentroClaro = MeshBuilder.CreateBox(
+      "vmSolBrillo",
+      { width: 0.052, height: 0.052, depth: 0.040 },
+      this.scene
+    );
+    solCentroClaro.position.set(-0.01, 0.06, 0.17);
+    solCentroClaro.material = this.mat("#fef08a", 0.55);
+    solCentroClaro.parent = this.nodoSol;
+    this.ink(solCentroClaro, 0.0025);
+
+    // 7. GUANTE Y CESTA DE COSECHA VOXEL
     this.nodoCosecha = new TransformNode("vmCosecha", this.scene);
     this.nodoCosecha.parent = this.root;
+    this.crearBrazoPixelBase(this.nodoCosecha, "vmCosecha");
 
-    const guante = MeshBuilder.CreateBox("vmGuanteCosecha", { width: 0.14, height: 0.16, depth: 0.09 }, this.scene);
-    guante.position.set(0.03, 0.05, 0.24);
-    guante.material = this.mat("#ea580c", 0.65);
+    const guante = MeshBuilder.CreateBox(
+      "vmGuanteCosecha",
+      { width: 0.09, height: 0.085, depth: 0.12 },
+      this.scene
+    );
+    guante.position.set(0.005, 0.01, 0.145);
+    guante.material = this.mat("#ea580c", 0.28);
     guante.parent = this.nodoCosecha;
     this.ink(guante);
 
-    const dedos = MeshBuilder.CreateBox("vmDedosCosecha", { width: 0.12, height: 0.08, depth: 0.07 }, this.scene);
-    dedos.position.set(0.03, 0.15, 0.26);
-    dedos.material = this.mat("#fed7aa", 0.65);
-    dedos.parent = this.nodoCosecha;
-    this.ink(dedos);
-
-    // 6. MANOS LIBRES EN PRIMERA PERSONA (Ambas manos articuladas para interactuar con el entorno)
-    this.nodoManos = new TransformNode("vmManosLibres", this.scene);
-    this.nodoManos.parent = this.root;
-
-    const matPiel = this.mat("#fed7aa", 0.62);
-    const matManga = this.mat("#15803d", 0.52);
-    const matPuno = this.mat("#fbbf24", 0.65);
-
-    const crearManoArticulada = (prefijo: string, signoLado: -1 | 1): TransformNode => {
-      const nodo = new TransformNode(prefijo, this.scene);
-      nodo.parent = this.nodoManos;
-
-      // Antebrazo / Manga campesina
-      const manga = MeshBuilder.CreateCylinder(
-        `${prefijo}_manga`,
-        { height: 0.18, diameterTop: 0.078, diameterBottom: 0.095, tessellation: 12 },
-        this.scene
-      );
-      manga.rotation.x = Math.PI / 2.6;
-      manga.rotation.z = -signoLado * 0.18;
-      manga.position.set(0, -0.04, 0.02);
-      manga.material = matManga;
-      manga.parent = nodo;
-      this.ink(manga, 0.011);
-
-      // Puño bordado de la camisa
-      const puno = MeshBuilder.CreateTorus(
-        `${prefijo}_puno`,
-        { diameter: 0.082, thickness: 0.018, tessellation: 14 },
-        this.scene
-      );
-      puno.rotation.x = Math.PI / 2.6;
-      puno.position.set(0, 0.01, 0.09);
-      puno.material = matPuno;
-      puno.parent = nodo;
-      this.ink(puno, 0.008);
-
-      // Palma redondeada
-      const palma = MeshBuilder.CreateSphere(
-        `${prefijo}_palma`,
-        { diameterX: 0.105, diameterY: 0.068, diameterZ: 0.115, segments: 12 },
-        this.scene
-      );
-      palma.position.set(0, 0.045, 0.155);
-      palma.rotation.x = 0.25;
-      palma.rotation.z = -signoLado * 0.22;
-      palma.material = matPiel;
-      palma.parent = nodo;
-      this.ink(palma, 0.011);
-
-      // Dedo pulgar oponible
-      const pulgar = MeshBuilder.CreateCylinder(
-        `${prefijo}_pulgar`,
-        { height: 0.065, diameterTop: 0.022, diameterBottom: 0.028, tessellation: 10 },
-        this.scene
-      );
-      pulgar.position.set(-signoLado * 0.048, 0.055, 0.165);
-      pulgar.rotation.x = Math.PI / 3.2;
-      pulgar.rotation.z = signoLado * 0.55;
-      pulgar.material = matPiel;
-      pulgar.parent = nodo;
-      this.ink(pulgar, 0.008);
-
-      // 4 Dedos articulados ligeramente curvados listos para interactuar
-      const offsetsDedos = [-0.033, -0.011, 0.011, 0.033];
-      const largosDedos = [0.062, 0.070, 0.064, 0.052];
-      for (let d = 0; d < 4; d++) {
-        const dedo = MeshBuilder.CreateCylinder(
-          `${prefijo}_dedo_${d}`,
-          { height: largosDedos[d], diameterTop: 0.018, diameterBottom: 0.022, tessellation: 10 },
-          this.scene
-        );
-        dedo.position.set(offsetsDedos[d], 0.068, 0.222);
-        dedo.rotation.x = Math.PI / 2.5;
-        dedo.rotation.y = offsetsDedos[d] * 1.5;
-        dedo.material = matPiel;
-        dedo.parent = nodo;
-        this.ink(dedo, 0.008);
-      }
-
-      return nodo;
-    };
-
-    // Posicionar Mano Izquierda y Mano Derecha encuadrando la vista en primera persona
-    this.manoIzqVM = crearManoArticulada("vmManoLibreIzq", -1);
-    this.manoIzqVM.position.set(-0.46, -0.02, 0.08);
-    this.manoIzqVM.rotation.set(0.05, 0.22, -0.08);
-
-    this.manoDerVM = crearManoArticulada("vmManoLibreDer", 1);
-    this.manoDerVM.position.set(-0.02, -0.02, 0.08);
-    this.manoDerVM.rotation.set(0.05, -0.12, 0.08);
+    // 8. SEMILLAS ASOCIADAS: FRIJOL Y CALABAZA (saquitos detallados con banda)
+    this.nodoFrijol = this.crearBolsaPixel("vmFrijol", "#d6b888", "#a855f7", 0.030, "#581c87");
+    this.nodoCalabaza = this.crearBolsaPixel("vmCalabaza", "#d6b888", "#fef3c7", 0.032, "#ea580c");
   }
 
   /**
@@ -308,12 +392,19 @@ export class ViewmodelHerramientas {
     this.nodoManos.setEnabled(herramienta === "mano");
     this.nodoAzada.setEnabled(herramienta === "azada");
     this.nodoSemillas.setEnabled(herramienta === "semilla");
+    this.nodoSemillaChalqueno.setEnabled(herramienta === "semilla_chalqueno");
+    this.nodoSemillaAzul.setEnabled(herramienta === "semilla_azul");
+    this.nodoSemillaRojo.setEnabled(herramienta === "semilla_rojo");
+    this.nodoSemillaPalomero.setEnabled(herramienta === "semilla_palomero");
     this.nodoRegadera.setEnabled(herramienta === "regadera");
     this.nodoAbono.setEnabled(herramienta === "abono");
-    this.nodoCosecha.setEnabled(herramienta === "cosecha" || herramienta === "sol");
+    this.nodoSol.setEnabled(herramienta === "sol");
+    this.nodoCosecha.setEnabled(herramienta === "cosecha");
+    this.nodoFrijol.setEnabled(herramienta === "frijol");
+    this.nodoCalabaza.setEnabled(herramienta === "calabaza");
 
-    // Pequeño retroceso al sacar la herramienta o mostrar las manos
-    this.root.position.y = this.POS_REPOSO.y - 0.12;
+    // Animación rápida de levantamiento al cambiar ranura
+    this.root.position.y = this.POS_REPOSO.y - 0.10;
   }
 
   /**
@@ -338,192 +429,153 @@ export class ViewmodelHerramientas {
   public actualizar(dt: number, velocidadMovimiento: number): void {
     this.tiempoIdle += dt;
 
-    // 1. Balanceo natural por respiración (idle breathing)
-    const factorSway = Math.min(1.0, velocidadMovimiento * 0.4 + 0.3);
-    const bobX = Math.sin(this.tiempoIdle * 2.5) * 0.015 * factorSway;
-    const bobY = Math.abs(Math.sin(this.tiempoIdle * 5.0)) * 0.02 * factorSway;
+    const factorSway = Math.min(1.0, velocidadMovimiento * 0.35 + 0.25);
+    const bobX = Math.sin(this.tiempoIdle * 2.6) * 0.009 * factorSway;
+    const bobY = Math.abs(Math.sin(this.tiempoIdle * 5.2)) * 0.012 * factorSway;
 
-    // 2. Si no hay acción activa, mantener reposo suave con bobbing
     if (!this.estaAnimando) {
       this.root.position.x = this.POS_REPOSO.x + bobX;
-      this.root.position.y += (this.POS_REPOSO.y - bobY - this.root.position.y) * 0.18;
+      this.root.position.y += (this.POS_REPOSO.y - bobY - this.root.position.y) * 0.22;
       this.root.position.z = this.POS_REPOSO.z;
 
       this.root.rotation.x = this.ROT_REPOSO.x;
       this.root.rotation.y = this.ROT_REPOSO.y;
-      this.root.rotation.z = this.ROT_REPOSO.z + bobX * 0.5;
-
-      // Balanceo alternado de ambas manos cuando "mano" está equipada
-      if (this.herramientaActual === "mano" && this.manoIzqVM && this.manoDerVM) {
-        const oscIzq = Math.sin(this.tiempoIdle * 4.5) * 0.018 * factorSway;
-        const oscDer = -Math.sin(this.tiempoIdle * 4.5) * 0.018 * factorSway;
-        this.manoIzqVM.position.set(-0.46 - bobX * 0.6, -0.02 + oscIzq, 0.08 + oscDer * 0.6);
-        this.manoIzqVM.rotation.set(0.05 + oscIzq * 1.5, 0.22, -0.08);
-        this.manoDerVM.position.set(-0.02 + bobX * 0.6, -0.02 + oscDer, 0.08 + oscIzq * 0.6);
-        this.manoDerVM.rotation.set(0.05 + oscDer * 1.5, -0.12, 0.08);
-      }
+      this.root.rotation.z = this.ROT_REPOSO.z + bobX * 0.6;
       return;
     }
 
-    // 3. Ejecución de animación de acción
-    this.animacionProgreso += dt * 3.8;
+    this.animacionProgreso += dt * 5.0;
+
+    // Disparo fiable del impacto (no depende de caer dentro de un sub-intervalo si hay caída de FPS)
+    const ejecutarImpacto = (sonido?: () => void) => {
+      if (this.onImpactoCallback) {
+        sonido?.();
+        this.onImpactoCallback();
+        this.onImpactoCallback = null;
+      }
+    };
 
     switch (this.tipoAnimacion) {
       case "mano": {
-        // Ambas manos se extienden al frente para tocar / agarrar / interactuar con el entorno
         if (this.animacionProgreso < 0.45) {
           const f = this.animacionProgreso / 0.45;
-          this.root.position.z = this.POS_REPOSO.z + f * 0.24;
-          this.root.position.y = this.POS_REPOSO.y + f * 0.05;
-          if (this.manoIzqVM && this.manoDerVM) {
-            this.manoIzqVM.position.x = -0.46 + f * 0.12;
-            this.manoDerVM.position.x = -0.02 - f * 0.10;
-            this.manoIzqVM.rotation.x = 0.05 + f * 0.42;
-            this.manoDerVM.rotation.x = 0.05 + f * 0.42;
-          }
+          this.root.position.z = this.POS_REPOSO.z + f * 0.16;
+          this.root.position.x = this.POS_REPOSO.x - f * 0.08;
+          this.root.rotation.x = this.ROT_REPOSO.x + f * 0.28;
         } else if (this.animacionProgreso < 0.65) {
-          if (this.onImpactoCallback) {
-            this.audio.clickUI();
-            this.onImpactoCallback();
-            this.onImpactoCallback = null;
-          }
+          ejecutarImpacto(() => this.audio.clickUI());
         } else if (this.animacionProgreso <= 1.0) {
-          const f = (this.animacionProgreso - 0.65) / 0.35;
-          const inv = 1 - f;
-          this.root.position.z = this.POS_REPOSO.z + 0.24 * inv;
-          this.root.position.y = this.POS_REPOSO.y + 0.05 * inv;
-          if (this.manoIzqVM && this.manoDerVM) {
-            this.manoIzqVM.position.x = -0.46 + 0.12 * inv;
-            this.manoDerVM.position.x = -0.02 - 0.10 * inv;
-            this.manoIzqVM.rotation.x = 0.05 + 0.42 * inv;
-            this.manoDerVM.rotation.x = 0.05 + 0.42 * inv;
-          }
+          ejecutarImpacto(() => this.audio.clickUI());
+          const inv = 1 - (this.animacionProgreso - 0.65) / 0.35;
+          this.root.position.z = this.POS_REPOSO.z + 0.16 * inv;
+          this.root.position.x = this.POS_REPOSO.x - 0.08 * inv;
+          this.root.rotation.x = this.ROT_REPOSO.x + 0.28 * inv;
         } else {
+          ejecutarImpacto(() => this.audio.clickUI());
           this.estaAnimando = false;
         }
         break;
       }
 
       case "azada": {
-        // Fase 1 (0 -> 0.45): Preparar y levantar
-        if (this.animacionProgreso < 0.45) {
-          const f = this.animacionProgreso / 0.45;
-          this.root.rotation.x = this.ROT_REPOSO.x - f * 0.65;
-          this.root.position.y = this.POS_REPOSO.y + f * 0.14;
-          this.root.position.z = this.POS_REPOSO.z - f * 0.08;
-        }
-        // Fase 2 (0.45 -> 0.65): Golpe rápido hacia abajo
-        else if (this.animacionProgreso < 0.65) {
-          const f = (this.animacionProgreso - 0.45) / 0.20;
-          this.root.rotation.x = this.ROT_REPOSO.x - 0.65 + f * 1.35;
-          this.root.position.y = this.POS_REPOSO.y + 0.14 - f * 0.28;
-          this.root.position.z = this.POS_REPOSO.z - 0.08 + f * 0.25;
+        if (this.animacionProgreso < 0.40) {
+          const f = this.animacionProgreso / 0.40;
+          this.root.rotation.x = this.ROT_REPOSO.x - f * 0.55;
+          this.root.position.y = this.POS_REPOSO.y + f * 0.08;
+        } else if (this.animacionProgreso < 0.65) {
+          const f = (this.animacionProgreso - 0.40) / 0.25;
+          this.root.rotation.x = this.ROT_REPOSO.x - 0.55 + f * 1.15;
+          this.root.position.y = this.POS_REPOSO.y + 0.08 - f * 0.14;
+          this.root.position.z = this.POS_REPOSO.z + f * 0.14;
 
-          // Punto de impacto en el ápice inferior
-          if (this.onImpactoCallback && f >= 0.75) {
-            this.audio.golpeAzada();
-            this.onImpactoCallback();
-            this.onImpactoCallback = null;
+          if (f >= 0.55) {
+            ejecutarImpacto(() => this.audio.golpeAzada());
           }
-        }
-        // Fase 3 (0.65 -> 1.0): Recuperación elástica
-        else if (this.animacionProgreso <= 1.0) {
-          const f = (this.animacionProgreso - 0.65) / 0.35;
-          this.root.rotation.x = this.ROT_REPOSO.x + 0.70 * (1 - f);
-          this.root.position.y = this.POS_REPOSO.y - 0.14 * (1 - f);
-          this.root.position.z = this.POS_REPOSO.z + 0.17 * (1 - f);
+        } else if (this.animacionProgreso <= 1.0) {
+          ejecutarImpacto(() => this.audio.golpeAzada());
+          const inv = 1 - (this.animacionProgreso - 0.65) / 0.35;
+          this.root.rotation.x = this.ROT_REPOSO.x + 0.60 * inv;
+          this.root.position.y = this.POS_REPOSO.y - 0.06 * inv;
+          this.root.position.z = this.POS_REPOSO.z + 0.14 * inv;
         } else {
+          ejecutarImpacto(() => this.audio.golpeAzada());
           this.estaAnimando = false;
         }
         break;
       }
 
       case "regadera": {
-        // Inclinación hacia adelante para verter agua
         if (this.animacionProgreso < 0.3) {
           const f = this.animacionProgreso / 0.3;
-          this.root.rotation.z = this.ROT_REPOSO.z - f * 0.75;
-          this.root.position.y = this.POS_REPOSO.y - f * 0.06;
-          this.root.position.z = this.POS_REPOSO.z + f * 0.15;
+          this.root.rotation.z = this.ROT_REPOSO.z + f * 0.52;
+          this.root.rotation.x = this.ROT_REPOSO.x + f * 0.32;
+          this.root.position.z = this.POS_REPOSO.z + f * 0.12;
         } else if (this.animacionProgreso < 0.85) {
-          // Mantener vertido y punto de impacto hídrico
-          if (this.onImpactoCallback && this.animacionProgreso > 0.45) {
-            this.onImpactoCallback();
-            this.onImpactoCallback = null;
+          if (this.animacionProgreso > 0.40) {
+            ejecutarImpacto();
           }
         } else if (this.animacionProgreso <= 1.0) {
-          const f = (this.animacionProgreso - 0.85) / 0.15;
-          this.root.rotation.z = this.ROT_REPOSO.z - 0.75 * (1 - f);
-          this.root.position.y = this.POS_REPOSO.y - 0.06 * (1 - f);
-          this.root.position.z = this.POS_REPOSO.z + 0.15 * (1 - f);
+          ejecutarImpacto();
+          const inv = 1 - (this.animacionProgreso - 0.85) / 0.15;
+          this.root.rotation.z = this.ROT_REPOSO.z + 0.52 * inv;
+          this.root.rotation.x = this.ROT_REPOSO.x + 0.32 * inv;
+          this.root.position.z = this.POS_REPOSO.z + 0.12 * inv;
         } else {
+          ejecutarImpacto();
           this.audio.detenerAgua();
           this.estaAnimando = false;
         }
         break;
       }
 
-      case "semilla": {
-        // Lanzar semillas con impulso
+      case "semilla":
+      case "semilla_chalqueno":
+      case "semilla_azul":
+      case "semilla_rojo":
+      case "semilla_palomero":
+      case "abono":
+      case "frijol":
+      case "calabaza": {
         if (this.animacionProgreso < 0.4) {
           const f = this.animacionProgreso / 0.4;
-          this.root.position.z = this.POS_REPOSO.z + f * 0.22;
-          this.root.rotation.x = this.ROT_REPOSO.x - f * 0.4;
+          this.root.position.z = this.POS_REPOSO.z + f * 0.16;
+          this.root.rotation.x = this.ROT_REPOSO.x + f * 0.35;
         } else if (this.animacionProgreso < 0.6) {
-          if (this.onImpactoCallback) {
-            this.audio.semillas();
-            this.onImpactoCallback();
-            this.onImpactoCallback = null;
-          }
+          ejecutarImpacto(() =>
+            this.tipoAnimacion === "abono" ? this.audio.abono() : this.audio.semillas()
+          );
         } else if (this.animacionProgreso <= 1.0) {
-          const f = (this.animacionProgreso - 0.6) / 0.4;
-          this.root.position.z = this.POS_REPOSO.z + 0.22 * (1 - f);
-          this.root.rotation.x = this.ROT_REPOSO.x - 0.4 * (1 - f);
+          ejecutarImpacto(() =>
+            this.tipoAnimacion === "abono" ? this.audio.abono() : this.audio.semillas()
+          );
+          const inv = 1 - (this.animacionProgreso - 0.6) / 0.4;
+          this.root.position.z = this.POS_REPOSO.z + 0.16 * inv;
+          this.root.rotation.x = this.ROT_REPOSO.x + 0.35 * inv;
         } else {
+          ejecutarImpacto(() =>
+            this.tipoAnimacion === "abono" ? this.audio.abono() : this.audio.semillas()
+          );
           this.estaAnimando = false;
         }
         break;
       }
 
-      case "abono": {
-        if (this.animacionProgreso < 0.4) {
-          const f = this.animacionProgreso / 0.4;
-          this.root.position.z = this.POS_REPOSO.z + f * 0.20;
-          this.root.position.y = this.POS_REPOSO.y + f * 0.08;
-        } else if (this.animacionProgreso < 0.6) {
-          if (this.onImpactoCallback) {
-            this.audio.abono();
-            this.onImpactoCallback();
-            this.onImpactoCallback = null;
-          }
-        } else if (this.animacionProgreso <= 1.0) {
-          const f = (this.animacionProgreso - 0.6) / 0.4;
-          this.root.position.z = this.POS_REPOSO.z + 0.20 * (1 - f);
-          this.root.position.y = this.POS_REPOSO.y + 0.08 * (1 - f);
-        } else {
-          this.estaAnimando = false;
-        }
-        break;
-      }
-
+      case "sol":
       case "cosecha":
       default: {
-        // Mano toma y tira con fuerza
         if (this.animacionProgreso < 0.5) {
           const f = this.animacionProgreso / 0.5;
-          this.root.position.z = this.POS_REPOSO.z + f * 0.30;
-          this.root.rotation.y = this.ROT_REPOSO.y + f * 0.35;
+          this.root.position.z = this.POS_REPOSO.z + f * 0.18;
+          this.root.rotation.y = this.ROT_REPOSO.y + f * 0.28;
         } else if (this.animacionProgreso < 0.7) {
-          if (this.onImpactoCallback) {
-            this.audio.cosecha();
-            this.onImpactoCallback();
-            this.onImpactoCallback = null;
-          }
+          ejecutarImpacto(() => this.audio.cosecha());
         } else if (this.animacionProgreso <= 1.0) {
-          const f = (this.animacionProgreso - 0.7) / 0.3;
-          this.root.position.z = this.POS_REPOSO.z + 0.30 * (1 - f);
-          this.root.rotation.y = this.ROT_REPOSO.y + 0.35 * (1 - f);
+          ejecutarImpacto(() => this.audio.cosecha());
+          const inv = 1 - (this.animacionProgreso - 0.7) / 0.3;
+          this.root.position.z = this.POS_REPOSO.z + 0.18 * inv;
+          this.root.rotation.y = this.ROT_REPOSO.y + 0.28 * inv;
         } else {
+          ejecutarImpacto(() => this.audio.cosecha());
           this.estaAnimando = false;
         }
         break;

@@ -350,20 +350,25 @@ export class ParticulasEducativas {
    * Destello dorado y halo estelar al sembrar la semilla
    */
   public efectoSiembra(posicion: Vector3): void {
-    const ps = new ParticleSystem("psSembrar", 40, this.scene);
+    const ps = new ParticleSystem("psSembrar", 20, this.scene);
     ps.particleTexture = this.texEstrellaAbono;
-    ps.emitter = posicion.clone().add(new Vector3(0, 0.12, 0));
-    ps.color1 = new Color4(1.0, 0.92, 0.3, 1.0);
-    ps.color2 = new Color4(0.98, 0.65, 0.1, 0.9);
+    ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
+    ps.emitter = posicion.clone().add(new Vector3(0, 0.14, 0));
+    ps.minEmitBox = new Vector3(-0.18, 0, -0.18);
+    ps.maxEmitBox = new Vector3(0.18, 0.08, 0.18);
+    ps.color1 = new Color4(1.0, 0.92, 0.3, 0.9);
+    ps.color2 = new Color4(0.98, 0.65, 0.1, 0.75);
     ps.colorDead = new Color4(0.9, 0.5, 0.0, 0.0);
-    ps.minSize = 0.12;
-    ps.maxSize = 0.28;
-    ps.manualEmitCount = 35;
-    ps.gravity = new Vector3(0, 0.2, 0);
-    ps.minEmitPower = 0.8;
-    ps.maxEmitPower = 1.8;
+    ps.minSize = 0.06;
+    ps.maxSize = 0.13;
+    ps.minLifeTime = 0.35;
+    ps.maxLifeTime = 0.65;
+    ps.manualEmitCount = 14;
+    ps.gravity = new Vector3(0, 0.3, 0);
+    ps.minEmitPower = 0.5;
+    ps.maxEmitPower = 1.2;
     ps.start();
-    this.programarLimpieza(ps, 700, 1800);
+    this.programarLimpieza(ps, 500, 1200);
   }
 
   /**

@@ -10,6 +10,7 @@
  * - Alternancia limpia con Modo Orbital mediante [V].
  */
 
+import { resolverColisiones } from "./colisiones";
 import {
   Scene,
   Vector3,
@@ -25,9 +26,12 @@ import { ViewmodelHerramientas } from "./vr/viewmodel_herramientas";
 import { SurcoMilpa, NodoSurco } from "./surco_milpa";
 import { EspantapajarosGuia } from "./educativo/espantapajaros_guia";
 import { AudioSintetizador } from "./audio_sintetizador";
-import { HerramientaTipo } from "./educativo/estado_educativo";
+import {
+  HerramientaTipo,
+  variedadDeHerramienta
+} from "./educativo/estado_educativo";
 import { CanastaRecoleccion3D } from "./vr/canasta_cosecha";
-import { REGLAS_JUEGO } from "./nucleo";
+import { REGLAS_JUEGO, VARIEDADES_MAIZ } from "./nucleo";
 
 export type ModoCamara = "fps" | "orbital";
 
@@ -40,6 +44,7 @@ export type TipoObjetivo3D =
   | "canasta"
   | "fogon"
   | "banco"
+  | "dispensador"
   | "codice"
   | "maleza"
   | "fauna"
@@ -49,10 +54,12 @@ export type TipoObjetivo3D =
 const ORDEN_HOTBAR: HerramientaTipo[] = [
   "mano",
   "azada",
-  "semilla",
+  "semilla_chalqueno",
+  "semilla_azul",
+  "semilla_rojo",
+  "semilla_palomero",
   "regadera",
   "abono",
-  "sol",
   "cosecha"
 ];
 
@@ -91,6 +98,7 @@ export class ControladorJugador {
   public onAccionAgronomica?: (tipo: HerramientaTipo, nodoId: number) => void;
   public onAccionContextualDerecho?: (nodoId: number) => void;
   public onCambioHerramientaRueda?: (herramienta: HerramientaTipo) => void;
+  public onWheelHotbar?: (dir: -1 | 1) => void;
   public onInteractuarObjeto3D?: (
     tipo: TipoObjetivo3D,
     meshName: string,
@@ -125,7 +133,7 @@ export class ControladorJugador {
 
     // 1. Inicializar Cámara en Primera Persona (UniversalCamera)
     this.camaraFPS = new UniversalCamera("camaraFPS", new Vector3(0, 1.55, -2.1), scene);
-    this.camaraFPS.setTarget(new Vector3(0, 1.2, 0));
+    this.camaraFPS.setTarget(new Vector3(-0.35, 0.38, 0));
     this.camaraFPS.inputs.clear();
     this.camaraFPS.minZ = 0.12;
     this.camaraFPS.maxZ = 250.0;
@@ -150,12 +158,12 @@ export class ControladorJugador {
     const mat = new StandardMaterial("matCajaSeleccionMinecraft", this.scene);
     mat.diffuseColor = Color3.FromHexString("#fef08a");
     mat.emissiveColor = Color3.FromHexString("#fbbf24");
-    mat.alpha = 0.22;
+    mat.alpha = 0.28;
     mat.wireframe = true;
 
-    this.cajaSeleccionMesh = MeshBuilder.CreateCylinder(
+    this.cajaSeleccionMesh = MeshBuilder.CreateBox(
       "cajaSeleccionMinecraft",
-      { diameterTop: 0.66, diameterBottom: 0.74, height: 0.22, tessellation: 16 },
+      { width: 0.74, height: 0.24, depth: 0.74 },
       this.scene
     );
     this.cajaSeleccionMesh.material = mat;
@@ -173,27 +181,28 @@ export class ControladorJugador {
       margin-left: -9px; margin-top: -9px;
       pointer-events: none; z-index: 999;
       display: flex; align-items: center; justify-content: center;
-      color: rgba(255, 255, 255, 0.92);
-      font-family: monospace; font-size: 22px; font-weight: 900;
-      text-shadow: 0 0 4px rgba(0, 0, 0, 0.95);
+      color: rgba(255, 255, 255, 0.88);
+      font-family: "Pixelify Sans", monospace; font-size: 20px; font-weight: 900;
+      text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.85);
       transition: transform 0.1s ease, color 0.1s ease;
     `;
     this.reticulaElem.textContent = "+";
     document.body.appendChild(this.reticulaElem);
 
-    // Tooltip informativo debajo de la retícula
+    // Tooltip informativo translúcido y discreto debajo de la retícula
     this.tooltipElem = document.createElement("div");
     this.tooltipElem.id = "fpsTooltip";
     this.tooltipElem.style.cssText = `
-      position: fixed; top: calc(50% + 20px); left: 50%;
+      position: fixed; top: calc(50% + 22px); left: 50%;
       transform: translateX(-50%);
-      background-color: rgba(15, 23, 42, 0.90);
-      color: #fef08a; padding: 6px 14px;
-      border-radius: 10px; font-family: "Trebuchet MS", sans-serif;
-      font-size: 13px; font-weight: bold; letter-spacing: 0.3px;
+      background-color: rgba(12, 18, 14, 0.56);
+      color: #fef08a; padding: 4px 10px;
+      border-radius: 0; font-family: "Pixelify Sans", "VT323", monospace;
+      font-size: 13px; font-weight: 700; letter-spacing: 0.2px;
+      text-shadow: 1px 1px 0 #000;
       pointer-events: none; z-index: 999;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.45);
-      border: 1.5px solid #ca8a04; display: none;
+      box-shadow: 2px 2px 0 rgba(0,0,0,0.45);
+      border: 1px solid rgba(251, 191, 36, 0.50); display: none;
       white-space: nowrap;
     `;
     document.body.appendChild(this.tooltipElem);
@@ -201,9 +210,15 @@ export class ControladorJugador {
 
   private hayModalAbierto(): boolean {
     const idsModales = [
+      "menuPrincipalMinecraft",
+      "menuPausaMinecraft",
+      "dispensadorSemillasModal",
       "modalAlmacenMazorcas",
       "almacenMazorcasModal",
       "mc-cofre-overlay",
+      "fogonCocinaModal",
+      "bancoSemillasModal",
+      "codiceMaizModal",
       "modalFogonCocina",
       "modalBancoSemillas",
       "modalCodiceMilpa",
@@ -212,8 +227,11 @@ export class ControladorJugador {
     ];
     for (const id of idsModales) {
       const el = document.getElementById(id);
-      if (el && el.style.display !== "none" && el.style.display !== "") {
-        return true;
+      if (el) {
+        const display = getComputedStyle(el).display;
+        if (display !== "none" && display !== "") {
+          return true;
+        }
       }
     }
     if (document.querySelector(".panel-clima-card.visible")) return true;
@@ -240,7 +258,12 @@ export class ControladorJugador {
     // Bloqueo de Puntero (Pointer Lock) al hacer clic en el canvas en modo FPS
     this.canvas.addEventListener("click", () => {
       if (this.modo === "fps" && !this.mouseBloqueado && !this.hayModalAbierto()) {
-        this.canvas.requestPointerLock?.();
+        try {
+          const req = this.canvas.requestPointerLock?.() as unknown as Promise<void> | undefined;
+          if (req && typeof req.catch === "function") req.catch(() => {});
+        } catch {
+          // PointerLock no disponible en contextos embebidos
+        }
       }
     });
 
@@ -270,8 +293,12 @@ export class ControladorJugador {
       (ev) => {
         if (this.modo !== "fps" || this.hayModalAbierto()) return;
         ev.preventDefault();
+        const dir: -1 | 1 = ev.deltaY > 0 ? 1 : -1;
+        if (this.onWheelHotbar) {
+          this.onWheelHotbar(dir);
+          return;
+        }
         const idxActual = ORDEN_HOTBAR.indexOf(this.viewmodel.herramientaActual);
-        const dir = ev.deltaY > 0 ? 1 : -1;
         const nuevoIdx = (idxActual + dir + ORDEN_HOTBAR.length) % ORDEN_HOTBAR.length;
         const nuevaH = ORDEN_HOTBAR[nuevoIdx];
         this.equipar(nuevaH);
@@ -307,16 +334,20 @@ export class ControladorJugador {
       this.viewmodel.setVisible(true);
       this.reticulaElem.style.display = "flex";
       this.onToast?.(
-        "🎮 Modo Primera Persona (Estilo Minecraft): [WASD] Caminar · [1-6 / Rueda] Cambiar Ítem · [Clic Izq/Der] Usar / Recolectar"
+        "🎮 Modo Primera Persona (Minecraft): [WASD] Caminar · [1-9 / Rueda] Ítems · [Clic] Usar / Recolectar"
       );
     } else {
       this.scene.activeCamera = this.camaraOrbital;
+      this.camaraOrbital.setTarget(new Vector3(0, 0.7, -0.6));
+      this.camaraOrbital.alpha = -Math.PI / 2.25;
+      this.camaraOrbital.beta = Math.PI / 3.0;
+      this.camaraOrbital.radius = 11.2;
       this.viewmodel.setVisible(false);
       this.reticulaElem.style.display = "none";
       this.tooltipElem.style.display = "none";
       this.cajaSeleccionMesh.setEnabled(false);
       if (document.exitPointerLock) document.exitPointerLock();
-      this.onToast?.("🔍 Modo Orbital: Arrastra el ratón para rotar la cámara libremente ([V] para volver a 1ª persona).");
+      this.onToast?.("🔍 Modo Orbital: Arrastra el ratón para rotar la cámara ([V] para volver a 1ª persona).");
     }
   }
 
@@ -347,6 +378,7 @@ export class ControladorJugador {
         this.tipoObjetivoEnfocado === "canasta" ||
         this.tipoObjetivoEnfocado === "fogon" ||
         this.tipoObjetivoEnfocado === "banco" ||
+        this.tipoObjetivoEnfocado === "dispensador" ||
         this.tipoObjetivoEnfocado === "codice" ||
         this.tipoObjetivoEnfocado === "mesa_clima" ||
         this.tipoObjetivoEnfocado === "maleza" ||
@@ -464,6 +496,9 @@ export class ControladorJugador {
       this.camaraFPS.position.x += (dirX / len) * velocidad * dt;
       this.camaraFPS.position.z += (dirZ / len) * velocidad * dt;
 
+      // Colisiones físicas con objetos sólidos (dispensador, mesa, fogón, árboles...)
+      resolverColisiones(this.camaraFPS.position);
+
       // Limitar al podio circular de 18 m
       const distCentro = Math.hypot(this.camaraFPS.position.x, this.camaraFPS.position.z);
       if (distCentro > 8.4) {
@@ -568,7 +603,11 @@ export class ControladorJugador {
       this.meshEnfocadoNombre = meshName;
 
       // 1. ¿Apunta a un Drop Físico 3D de Mazorca en el suelo?
-      if (meshName.includes("mazorcaDrop")) {
+      if (
+        meshName.includes("dropMesh_") ||
+        meshName.includes("dropHusk_") ||
+        meshName.includes("mazorcaDrop")
+      ) {
         this.tipoObjetivoEnfocado = "drop_mazorca";
         this.resaltarReticula(true);
         this.mostrarTooltip("🌽 Mazorca Cosechada: [Clic] o acércate para recogerla");
@@ -699,6 +738,12 @@ export class ControladorJugador {
         this.mostrarTooltip("🧬 Banco de Semillas: [Clic] o [M] Abrir Selección Masal");
         return;
       }
+      if (meshName.includes("dispensador")) {
+        this.tipoObjetivoEnfocado = "dispensador";
+        this.resaltarReticula(true);
+        this.mostrarTooltip("🌰 Dispensador de Semillas: [Clic] en un botón de color = recibir esa semilla · [U] catálogo completo");
+        return;
+      }
       if (meshName.includes("codice")) {
         this.tipoObjetivoEnfocado = "codice";
         this.resaltarReticula(true);
@@ -759,15 +804,15 @@ export class ControladorJugador {
 
     if (estaMuerta && !nodo.cosechada) {
       if (nodo.plantaInterna.causaMuerte === "agotamiento") {
-        return `🌽 Mazorca seca lista ([6] Cosechar) o [Q] Quitar planta`;
+        return `🌽 Mazorca seca lista ([7] Cosechar) o [Q] Quitar planta`;
       }
-      return `💀 Planta seca (${nodo.plantaInterna.causaMuerte || "estrés"}): Presiona [Q] o usa Azada [1] para quitarla`;
+      return `💀 Planta seca (${nodo.plantaInterna.causaMuerte || "estrés"}): [Q] o Azada [2] para limpiar`;
     }
 
     const listaCosecha = nodo.sembrada && !nodo.cosechada && dia >= REGLAS_JUEGO.DIAS_COSECHA_MIN;
 
-    if (listaCosecha && herramienta !== "cosecha") {
-      return `🌽 ¡Mazorca lista! [Clic Der] o equipa [6] para cosechar · [Q] Quitar`;
+    if (listaCosecha && herramienta !== "cosecha" && herramienta !== "mano") {
+      return `🌽 ¡Mazorca lista! [Clic Der] o equipa [7] Guante para cosechar · [Q] Quitar`;
     }
 
     switch (herramienta) {
@@ -788,7 +833,7 @@ export class ControladorJugador {
           return `✋ [Clic Izq] Sacudir espiga con la mano para polinizar (${Math.round(nodo.polinizacion * 100)}%) 🌼`;
         }
         if (!nodo.sembrada && nodo.tierraArada < 100) {
-          return `✋ [Clic Izq] Aflojar terrones a mano (${Math.round(nodo.tierraArada)}%) o usa Azada [1]`;
+          return `✋ [Clic Izq] Aflojar terrones a mano (${Math.round(nodo.tierraArada)}%) o usa Azada [2]`;
         }
         if (!nodo.sembrada && nodo.tierraArada >= 100) {
           return `✋ [Clic Izq] Sembrar semilla de ${nodo.variedad.toUpperCase()} con la mano 🌱`;
@@ -802,21 +847,40 @@ export class ControladorJugador {
           ? `[Clic Izq] Arar tierra (${Math.round(nodo.tierraArada)}%) ⛏️`
           : nodo.sembrada
           ? `Planta activa · [Q] Quitar planta si deseas reiniciar`
-          : `Tierra 100% arada · Equipa Semillas [2] para sembrar ✨`;
+          : `Tierra 100% arada · Equipa una Semilla [3-6] para sembrar ✨`;
       case "semilla":
+      case "semilla_chalqueno":
+      case "semilla_azul":
+      case "semilla_rojo":
+      case "semilla_palomero": {
+        const vHerr = variedadDeHerramienta(herramienta);
+        const nombreVar = vHerr ? VARIEDADES_MAIZ[vHerr].nombre : nodo.variedad.toUpperCase();
         return !nodo.sembrada || nodo.cosechada
-          ? `[Clic Izq] Sembrar semilla de ${nodo.variedad.toUpperCase()} 🌰`
-          : `Sembrada (Día ${Math.floor(dia)}) · Asocia Frijol [B] / Calabaza [N] · [Q] Quitar`;
+          ? `[Clic Izq] Sembrar ${nombreVar} aquí (cualquier casilla) 🌰`
+          : `Sembrada (Día ${Math.floor(dia)}) · Asocia Frijol [B] o Calabaza [N]`;
+      }
+      case "frijol":
+        return !nodo.sembrada
+          ? `Siembra maíz primero [3-6] para asociar Frijol Ayocote 🫘`
+          : nodo.frijolVid > 0.1
+          ? `🫘 Frijol Ayocote asociado (${Math.round(nodo.frijolVid * 100)}% guía · fija Nitrógeno)`
+          : `🫘 [Clic Izq] Asociar Frijol Ayocote enredado (+Nitrógeno al suelo)`;
+      case "calabaza":
+        return !nodo.sembrada
+          ? `Siembra maíz primero [3-6] para asociar Calabaza Criolla 🎃`
+          : nodo.calabazaCobertura > 0.1
+          ? `🎃 Calabaza Criolla cubriendo suelo (${Math.round(nodo.calabazaCobertura * 100)}% sombra)`
+          : `🎃 [Clic Izq] Sembrar Calabaza Criolla (retiene humedad y frena maleza)`;
       case "regadera":
         return `[Clic Izq] Regar agua (${Math.round(nodo.humedadVWC)}% VWC) 💧`;
       case "abono":
         return `[Clic Izq] Abonar nutrientes (${Math.round(nodo.nutrientesNPK)}% NPK) 🌿`;
       case "cosecha":
         return nodo.cosechada
-          ? `Mazorca cosechada · Presiona [Q] o usa Azada [1] para quitar rastrojo`
+          ? `Mazorca cosechada · [Q] o Azada [2] para limpiar rastrojo`
           : dia >= REGLAS_JUEGO.DIAS_COSECHA_MIN
           ? `[Clic Izq] ¡Cosechar mazorcas maduras! (Calidad ${Math.round(nodo.calidad * 100)}%) 🌽`
-          : `En crecimiento (Día ${Math.floor(dia)}/${REGLAS_JUEGO.DIAS_COSECHA_MIN}) · Usa Sol [5] o [Q] Quitar`;
+          : `En crecimiento (Día ${Math.floor(dia)}/${REGLAS_JUEGO.DIAS_COSECHA_MIN}) · Usa +15d [T] o [Q] Quitar`;
       case "sol":
         return `[Clic Izq] Avanzar +15 Días de Sol ☀️`;
       default:
@@ -843,8 +907,10 @@ export class ControladorJugador {
     return this.camaraFPS.position;
   }
 
-  public teletransportarA(posicion: Vector3): void {
-    this.camaraFPS.position.set(posicion.x, 1.55, posicion.z);
-    this.camaraFPS.setTarget(new Vector3(posicion.x, 1.2, 0));
+  public teletransportarA(posicion: Vector3, mirarA?: Vector3): void {
+    this.velY = 0;
+    this.enSuelo = true;
+    this.camaraFPS.position.set(posicion.x, this.ALTURA_OJOS, posicion.z);
+    this.camaraFPS.setTarget(mirarA ?? new Vector3(posicion.x, 0.52, 0));
   }
 }

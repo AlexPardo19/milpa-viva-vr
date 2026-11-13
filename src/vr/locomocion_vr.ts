@@ -33,6 +33,7 @@ export class LocomocionVR {
 
   public nodoActualIndex = 0;
   public enLobby = true;
+  public onTeletransportar?: (posicion: Vector3, mirarA: Vector3) => void;
 
   constructor(
     scene: Scene,
@@ -151,6 +152,11 @@ export class LocomocionVR {
       const n = this.surco.nodos[i];
       n.marcadorTeleport.scaling.setAll(i === nodoId ? 1.25 : 1.0);
     }
+
+    this.onTeletransportar?.(
+      new Vector3(nodo.x, 1.55, -1.35),
+      new Vector3(nodo.x, 1.05, 0)
+    );
   }
 
   /**
@@ -177,6 +183,11 @@ export class LocomocionVR {
       this.camara.beta = Math.PI / 2.45;
       this.camara.radius = 2.8;
     }
+
+    this.onTeletransportar?.(
+      new Vector3(0, 1.55, -1.9),
+      new Vector3(0, 1.15, -3.8)
+    );
   }
 
   /**
@@ -203,6 +214,11 @@ export class LocomocionVR {
       this.camara.beta = Math.PI / 2.4;
       this.camara.radius = 2.2;
     }
+
+    this.onTeletransportar?.(
+      new Vector3(2.8, 1.55, -2.1),
+      new Vector3(2.8, 0.95, -3.4)
+    );
   }
 
   /**
@@ -229,5 +245,10 @@ export class LocomocionVR {
       this.camara.beta = Math.PI / 2.4;
       this.camara.radius = 2.2;
     }
+
+    this.onTeletransportar?.(
+      new Vector3(-2.8, 1.55, -2.1),
+      new Vector3(-3.0, 0.95, -3.4)
+    );
   }
 }

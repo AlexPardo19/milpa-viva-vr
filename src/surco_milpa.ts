@@ -15,11 +15,20 @@ import {
   Color3,
   StandardMaterial,
   DynamicTexture,
+  Texture,
   Mesh,
   MeshBuilder,
   TransformNode,
   ShadowGenerator
 } from "@babylonjs/core";
+import {
+  configurarSamplingPixel,
+  crearTexAguaPixel,
+  crearTexMaderaPixel,
+  crearTexRuidoSueloPixel,
+  crearTexTierraSurcoPixel,
+  dibujarMarcoLetreroPixel,
+} from "./ui/texturas_pixel_3d";
 import {
   Planta,
   crearPlanta,
@@ -126,9 +135,10 @@ export class SurcoMilpa {
     const H = 0.18;
 
     this.camellonMat = new StandardMaterial("matCamellon", this.scene);
-    this.camellonMat.diffuseColor = Color3.FromHexString("#8a5a2b");
-    this.camellonMat.emissiveColor = Color3.FromHexString("#4a2e12");
-    this.camellonMat.specularColor = new Color3(0.04, 0.04, 0.04);
+    this.camellonMat.diffuseTexture = crearTexTierraSurcoPixel(this.scene, 8, 2);
+    this.camellonMat.diffuseColor = Color3.FromHexString("#e2c5a6");
+    this.camellonMat.emissiveColor = Color3.FromHexString("#3a220c");
+    this.camellonMat.specularColor = new Color3(0.03, 0.03, 0.03);
 
     this.camellonMesh = MeshBuilder.CreateBox("camellonSurco", {
       width: W,
@@ -138,10 +148,6 @@ export class SurcoMilpa {
     this.camellonMesh.position.set(0, H / 2, 0);
     this.camellonMesh.material = this.camellonMat;
     this.camellonMesh.parent = this.root;
-
-    this.camellonMesh.renderOutline = true;
-    this.camellonMesh.outlineWidth = 0.02;
-    this.camellonMesh.outlineColor = Color3.FromHexString("#25330f");
 
     if (this.shadowGen) {
       this.camellonMesh.receiveShadows = true;
@@ -159,9 +165,13 @@ export class SurcoMilpa {
       "azul"
     ];
 
+    const texRuidoSuelo = crearTexRuidoSueloPixel(this.scene);
+    const texAguaCharco = crearTexAguaPixel(this.scene, 1, 1);
+
     const matTutor = new StandardMaterial("matTutor", this.scene);
-    matTutor.diffuseColor = Color3.FromHexString("#78350f");
-    matTutor.emissiveColor = Color3.FromHexString("#451a03").scale(0.35);
+    matTutor.diffuseTexture = crearTexMaderaPixel(this.scene, false, 1, 3);
+    matTutor.diffuseColor = Color3.FromHexString("#e8c8a0");
+    matTutor.emissiveColor = Color3.FromHexString("#3b1a04").scale(0.28);
 
     const matPetate = new StandardMaterial("matPetate", this.scene);
     matPetate.diffuseColor = Color3.FromHexString("#fde68a");
@@ -174,40 +184,37 @@ export class SurcoMilpa {
       const posMundo = new Vector3(x, 0.19, 0);
       const posTeleport = new Vector3(x, 0.02, -1.15);
 
-      // A. Montículo individual de aporque/labranza
+      // A. Montículo voxel pixel-art de aporque/labranza
       const montMat = new StandardMaterial(`montMat_${i}`, this.scene);
+      montMat.diffuseTexture = texRuidoSuelo;
       montMat.diffuseColor = Color3.FromHexString("#7a4c22");
-      montMat.emissiveColor = Color3.FromHexString("#442810");
-      montMat.specularColor = new Color3(0.05, 0.05, 0.05);
+      montMat.emissiveColor = Color3.FromHexString("#38200b");
+      montMat.specularColor = new Color3(0.03, 0.03, 0.03);
 
-      const montMesh = MeshBuilder.CreateCylinder(`monticuloNodo_${i}`, {
-        diameterTop: 0.52,
-        diameterBottom: 0.68,
-        height: 0.14,
-        tessellation: 20
+      const montMesh = MeshBuilder.CreateBox(`monticuloNodo_${i}`, {
+        width: 0.62,
+        height: 0.13,
+        depth: 0.62
       }, this.scene);
       montMesh.position.copyFrom(posMundo);
       montMesh.position.y += 0.04;
       montMesh.material = montMat;
       montMesh.parent = this.root;
 
-      montMesh.renderOutline = true;
-      montMesh.outlineWidth = 0.018;
-      montMesh.outlineColor = Color3.FromHexString("#25330f");
-
-      // B. Lámina reflectante de encharcamiento / charco
+      // B. Lámina pixelada de encharcamiento / charco
       const charcoMat = new StandardMaterial(`charcoMat_${i}`, this.scene);
-      charcoMat.diffuseColor = Color3.FromHexString("#4da6ff");
+      charcoMat.diffuseTexture = texAguaCharco;
+      charcoMat.diffuseColor = Color3.FromHexString("#bae6fd");
       charcoMat.alpha = 0.0;
-      charcoMat.specularColor = new Color3(0.8, 0.8, 0.9);
+      charcoMat.specularColor = new Color3(0.4, 0.5, 0.7);
 
-      const charcoMesh = MeshBuilder.CreateDisc(`charcoNodo_${i}`, {
-        radius: 0.28,
-        tessellation: 24
+      const charcoMesh = MeshBuilder.CreateBox(`charcoNodo_${i}`, {
+        width: 0.52,
+        height: 0.012,
+        depth: 0.52
       }, this.scene);
-      charcoMesh.rotation.x = Math.PI / 2;
       charcoMesh.position.copyFrom(posMundo);
-      charcoMesh.position.y += 0.115;
+      charcoMesh.position.y += 0.112;
       charcoMesh.material = charcoMat;
       charcoMesh.parent = this.root;
 
@@ -252,10 +259,10 @@ export class SurcoMilpa {
 
       const semillasMesh: Mesh[] = [];
       for (let k = -1; k <= 1; k++) {
-        const grano = MeshBuilder.CreateSphere(`granoNodo_${i}_${k}`, {
-          diameterX: 0.036,
-          diameterY: 0.024,
-          diameterZ: 0.032
+        const grano = MeshBuilder.CreateBox(`granoNodo_${i}_${k}`, {
+          width: 0.036,
+          height: 0.024,
+          depth: 0.032
         }, this.scene);
         grano.position.set(posMundo.x + k * 0.08, posMundo.y + 0.072, posMundo.z);
         grano.material = matSemilla;
@@ -264,11 +271,11 @@ export class SurcoMilpa {
         semillasMesh.push(grano);
       }
 
-      // D.3. Rodrigón / Tutor de madera anti-acame (M6)
-      const tutorMesh = MeshBuilder.CreateCylinder(`tutorNodo_${i}`, {
-        diameter: 0.035,
+      // D.3. Rodrigón / Tutor voxel de madera anti-acame (M6)
+      const tutorMesh = MeshBuilder.CreateBox(`tutorNodo_${i}`, {
+        width: 0.04,
         height: 1.35,
-        tessellation: 8
+        depth: 0.04
       }, this.scene);
       tutorMesh.position.set(posMundo.x - 0.09, posMundo.y + 0.65, posMundo.z + 0.04);
       tutorMesh.rotation.z = -0.06;
@@ -281,7 +288,7 @@ export class SurcoMilpa {
         diameterTop: 0.35,
         diameterBottom: 0.58,
         height: 0.55,
-        tessellation: 12,
+        tessellation: 6,
         arc: 0.6
       }, this.scene);
       proteccionMesh.position.set(posMundo.x, posMundo.y + 0.32, posMundo.z + 0.06);
@@ -357,7 +364,8 @@ export class SurcoMilpa {
   ): { mesh: Mesh; tex: DynamicTexture } {
     const W = 0.40;
     const H = 0.22;
-    const tex = new DynamicTexture(`texLetrero_${id}`, { width: 256, height: 140 }, this.scene, true);
+    const tex = new DynamicTexture(`texLetrero_${id}`, { width: 256, height: 140 }, this.scene, false, Texture.NEAREST_SAMPLINGMODE);
+    configurarSamplingPixel(tex);
 
     const mat = new StandardMaterial(`matLetrero_${id}`, this.scene);
     mat.diffuseTexture = tex;
@@ -368,10 +376,6 @@ export class SurcoMilpa {
     mesh.rotation.x = -Math.PI / 7;
     mesh.material = mat;
     mesh.parent = this.root;
-
-    mesh.renderOutline = true;
-    mesh.outlineWidth = 0.015;
-    mesh.outlineColor = Color3.FromHexString("#25330f");
 
     return { mesh, tex };
   }
@@ -385,15 +389,18 @@ export class SurcoMilpa {
     const W = 256;
     const H = 140;
 
-    ctx.fillStyle = "#fffbeb";
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.strokeStyle = nodo.plaga > 25 ? "#dc2626" : "#78350f";
-    ctx.lineWidth = 6;
-    ctx.strokeRect(4, 4, W - 8, H - 8);
+    dibujarMarcoLetreroPixel(
+      ctx,
+      W,
+      H,
+      "#fffbeb",
+      nodo.plaga > 25 ? "#b91c1c" : "#451a03",
+      "#d97706",
+      4
+    );
 
     ctx.fillStyle = "#92400e";
-    ctx.font = "bold 20px Trebuchet MS, sans-serif";
+    ctx.font = "bold 20px 'Pixelify Sans', monospace";
     const iconoAsoc =
       nodo.frijolVid > 0.05 && nodo.calabazaCobertura > 0.05
         ? " 🔺"
@@ -405,7 +412,7 @@ export class SurcoMilpa {
     ctx.fillText(`P${id + 1}: ${varCfg.nombre.split(" ")[1] || "Maíz"}${iconoAsoc}`, 14, 28);
 
     ctx.fillStyle = "#1e293b";
-    ctx.font = "bold 15px Trebuchet MS, sans-serif";
+    ctx.font = "bold 15px 'Pixelify Sans', monospace";
     const estaMuerta = nodo.plantaInterna.estado === "MUERTA";
     const secado = nodo.plantaInterna.secado ?? 0;
 
@@ -445,7 +452,7 @@ export class SurcoMilpa {
       );
     }
 
-    ctx.font = "13px Trebuchet MS, sans-serif";
+    ctx.font = "13px 'Pixelify Sans', monospace";
     ctx.fillStyle = "#0284c7";
     ctx.fillText(`💧 ${Math.round(nodo.humedadVWC)}% | 🌿 NPK ${Math.round(nodo.nutrientesNPK)}%`, 14, 84);
 
@@ -453,7 +460,7 @@ export class SurcoMilpa {
       ctx.fillStyle = "#991b1b";
       ctx.fillText(
         nodo.plantaInterna.causaMuerte === "agotamiento"
-          ? `🌽 Mazorca [6] o Quitar [Q]`
+          ? `🌽 Mazorca [7] o Quitar [Q]`
           : `🗑️ Quitar planta seca [Q] / [1]`,
         14,
         108
@@ -676,6 +683,13 @@ export class SurcoMilpa {
 
     if (variedad) {
       nodo.variedad = variedad;
+      nodo.maiz.setVariedad(variedad);
+      const varCol = Color3.FromHexString(VARIEDADES_MAIZ[variedad].colorHex);
+      const matS = nodo.semillasMesh[0]?.material as StandardMaterial | null;
+      if (matS) {
+        matS.diffuseColor = varCol;
+        matS.emissiveColor = varCol.scale(0.5);
+      }
     }
     nodo.sembrada = true;
     nodo.cosechada = false;
@@ -919,15 +933,15 @@ export class SurcoMilpa {
         p.causaMuerte === "helada"
           ? "una helada severa (necesitaba Petate [G] o temperatura más cálida)"
           : p.causaMuerte === "sequia"
-          ? `la sequía (suelo < ${varCfg.pmp}% VWC sin riego [3])`
+          ? `la sequía (suelo < ${varCfg.pmp}% VWC sin riego [4])`
           : p.causaMuerte === "calor"
           ? `el calor extremo (> ${varCfg.tCorte + 4} °C)`
           : p.causaMuerte === "encharcamiento"
-          ? "asfixia radicular por exceso de agua (necesitaba drenaje con Azada [1])"
+          ? "asfixia radicular por exceso de agua (necesitaba drenaje con Azada [2])"
           : `estrés climático (${p.causaMuerte || "severo"})`;
       return {
         exito: false,
-        mensaje: `💀 El ${varCfg.nombre} en estación ${id + 1} murió por ${descCausa}. Limpia la planta seca con la Azada [1] para volver a sembrar.`
+        mensaje: `💀 El ${varCfg.nombre} en estación ${id + 1} murió por ${descCausa}. Limpia la planta seca con la Azada [2] para volver a sembrar.`
       };
     }
 
@@ -1192,8 +1206,8 @@ export class SurcoMilpa {
       const n = this.nodos[i];
       const distSq = Vector3.DistanceSquared(n.posicionMundo, camPos);
       const cerca = distSq < 36.0 || i === this.nodoSeleccionadoId; // < 6 m
-      n.monticuloMesh.renderOutline = cerca;
-      n.letreroMadera.renderOutline = cerca;
+      n.monticuloMesh.renderOutline = false;
+      n.letreroMadera.renderOutline = false;
       n.maiz.actualizarContornoDistancia(cerca);
     }
   }
@@ -1238,6 +1252,105 @@ export class SurcoMilpa {
       n.maiz.root.setEnabled(false);
       n.semillasMesh.forEach((g) => g.setEnabled(false));
       n.surcosMesh.forEach((s) => s.scaling.set(1, 0.001, 1));
+      this.actualizarLetrero(i);
+    }
+  }
+
+  public exportarSnapshot(): import("./juego/persistencia_mundo").NodoGuardado[] {
+    return this.nodos.map((n) => ({
+      id: n.id,
+      variedad: n.variedad,
+      cultivoAsociado: n.cultivoAsociado,
+      tierraArada: n.tierraArada,
+      sembrada: n.sembrada,
+      humedadVWC: n.humedadVWC,
+      nutrientesNPK: n.nutrientesNPK,
+      gddAcumulados: n.gddAcumulados,
+      frame60: n.frame60,
+      cosechada: n.cosechada,
+      diasCultivo: n.diasCultivo,
+      maleza: n.maleza,
+      plaga: n.plaga,
+      polinizacion: n.polinizacion,
+      tutorado: n.tutorado,
+      proteccion: n.proteccion,
+      calidad: n.calidad,
+      frijolVid: n.frijolVid,
+      calabazaCobertura: n.calabazaCobertura,
+      plantaInterna: {
+        ...n.plantaInterna,
+        rasgosHeredados: n.plantaInterna.rasgosHeredados
+          ? { ...n.plantaInterna.rasgosHeredados }
+          : undefined
+      }
+    }));
+  }
+
+  public restaurarSnapshot(
+    snaps: import("./juego/persistencia_mundo").NodoGuardado[],
+    clima: ClimateState,
+    metricas: Metricas
+  ): void {
+    if (!Array.isArray(snaps)) return;
+    for (let i = 0; i < this.nodos.length && i < snaps.length; i++) {
+      const s = snaps[i];
+      const n = this.nodos[i];
+      n.variedad = s.variedad || n.variedad;
+      n.cultivoAsociado = s.cultivoAsociado || "ninguno";
+      n.tierraArada = s.tierraArada ?? 0;
+      n.sembrada = !!s.sembrada;
+      n.humedadVWC = s.humedadVWC ?? 24;
+      n.nutrientesNPK = s.nutrientesNPK ?? 45;
+      n.gddAcumulados = s.gddAcumulados ?? 0;
+      n.frame60 = s.frame60 ?? 0;
+      n.cosechada = !!s.cosechada;
+      n.diasCultivo = s.diasCultivo ?? 0;
+      n.diasAcumuladosPaso = 0;
+      n.maleza = s.maleza ?? 0;
+      n.plaga = s.plaga ?? 0;
+      n.polinizacion = s.polinizacion ?? 0;
+      n.tutorado = !!s.tutorado;
+      n.proteccion = s.proteccion ?? 0;
+      n.calidad = s.calidad ?? 0.85;
+      n.frijolVid = s.frijolVid ?? 0;
+      n.calabazaCobertura = s.calabazaCobertura ?? 0;
+
+      if (s.plantaInterna) {
+        n.plantaInterna = {
+          ...s.plantaInterna,
+          variedad: n.variedad,
+          rasgosHeredados: s.plantaInterna.rasgosHeredados
+            ? { ...s.plantaInterna.rasgosHeredados }
+            : undefined
+        };
+      } else {
+        n.plantaInterna = crearPlanta(n.variedad, n.cultivoAsociado);
+      }
+
+      const varCfg = VARIEDADES_MAIZ[n.variedad];
+      n.maiz.setVariedad(n.variedad);
+      n.estadoCrec.plantaInterna = n.plantaInterna;
+      n.estadoCrec.dia = n.diasCultivo;
+      n.estadoCrec.gddAcumulado = n.gddAcumulados;
+      const etapa = etapaDe(n.gddAcumulados, CFG, varCfg);
+      n.estadoCrec.etapa = nombreEtapa(etapa);
+      n.estadoCrec.estaMuerta = n.plantaInterna.estado === "MUERTA";
+      n.estadoCrec.causaMuerte = n.plantaInterna.causaMuerte ?? null;
+
+      n.tutorMesh.setEnabled(n.tutorado);
+      n.proteccionMesh.setEnabled(n.proteccion > 0);
+      n.surcosMesh.forEach((sm) => {
+        sm.scaling.y = n.tierraArada >= 100 ? 1.0 : Math.max(0.001, n.tierraArada / 100);
+      });
+      n.semillasMesh.forEach((gm) => gm.setEnabled(n.sembrada && n.diasCultivo < 8));
+
+      const factorFrame = Math.min(1, n.frame60 / 59);
+      const escala = n.sembrada ? 0.28 + factorFrame * 0.14 : 0.28;
+      n.maiz.root.scaling.setAll(escala);
+      n.maiz.root.setEnabled(n.sembrada);
+      if (n.sembrada) {
+        n.maiz.sincronizarConEstado(n.estadoCrec, clima, metricas);
+      }
       this.actualizarLetrero(i);
     }
   }

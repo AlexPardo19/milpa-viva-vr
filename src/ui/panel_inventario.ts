@@ -138,6 +138,9 @@ export interface HotbarPixelCallbacks {
   onSembrarCalabaza?: () => void;
   onColocarTutor?: () => void;
   onColocarPetate?: () => void;
+  onSol?: () => void;
+  onAbrirMochila?: () => void;
+  onAbrirDispensador?: () => void;
 }
 
 /**
@@ -181,26 +184,29 @@ export class HotbarPixel {
       max-width: 98vw;
     `;
 
-    // 1. Rótulo flotante que muestra el nombre del ítem seleccionado durante 2s
+    // 1. Rótulo flotante estilo Minecraft directamente arriba de la barra (nombre del objeto)
     this.rotuloItem = document.createElement("div");
     this.rotuloItem.className = "mc-texto";
     this.rotuloItem.style.cssText = `
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 700;
-      color: #ffd74a;
+      color: #fef08a;
       opacity: 0;
-      transition: opacity 0.25s ease;
-      background: rgba(0, 0, 0, 0.72);
-      padding: 3px 12px;
-      border: 2px solid #000;
+      transition: opacity 0.3s ease;
+      background: rgba(8, 12, 10, 0.32);
+      padding: 2px 12px;
+      margin-bottom: 5px;
+      border: none;
       border-radius: 0;
+      text-shadow: 2px 2px 0 #000000;
       pointer-events: none;
+      letter-spacing: 0.4px;
     `;
     this.el.appendChild(this.rotuloItem);
 
-    // 2. Cajón Desplegable de Labores Agronómicas Secundarias (arriba de la barra)
+    // 2. Cajón Desplegable de Labores Agronómicas Secundarias (translúcido sobre la barra)
     this.laboresDrawer = document.createElement("div");
-    this.laboresDrawer.className = "mc-panel-oscuro";
+    this.laboresDrawer.className = "mc-hotbar-traslucida";
     this.laboresDrawer.style.cssText = `
       display: none;
       flex-wrap: wrap;
@@ -212,6 +218,8 @@ export class HotbarPixel {
       pointer-events: auto;
     `;
     const labores: { icon: string; label: string; fn?: () => void }[] = [
+      { icon: "☀️", label: "Sol +15d [Y]", fn: () => this.callbacks?.onSol?.() },
+      { icon: "🌰", label: "Dispensador [U]", fn: () => this.callbacks?.onAbrirDispensador?.() },
       { icon: "🗑️", label: "Quitar Planta [Q]", fn: () => this.callbacks?.onQuitarPlanta?.() },
       { icon: "🌿", label: "Deshierbar [X]", fn: () => this.callbacks?.onDeshierbar?.() },
       { icon: "🌼", label: "Polinizar [P]", fn: () => this.callbacks?.onPolinizar?.() },
@@ -224,15 +232,16 @@ export class HotbarPixel {
       const b = document.createElement("button");
       b.className = "mc-boton";
       b.style.cssText = `
-        background: #2b2b2b;
-        color: #fff;
+        background: rgba(20, 28, 24, 0.72);
+        color: #f8fafc;
         border: 2px solid;
-        border-color: #666 #000 #000 #666;
-        padding: 5px 9px;
+        border-color: rgba(255,255,255,0.28) rgba(0,0,0,0.8) rgba(0,0,0,0.8) rgba(255,255,255,0.28);
+        padding: 4px 9px;
         font-size: 11px;
         font-weight: 700;
         cursor: pointer;
         border-radius: 0;
+        text-shadow: 1px 1px 0 #000;
       `;
       b.textContent = `${item.icon} ${item.label}`;
       b.addEventListener("click", () => item.fn?.());
@@ -240,15 +249,14 @@ export class HotbarPixel {
     });
     this.el.appendChild(this.laboresDrawer);
 
-    // 3. Contenedor principal de la Hotbar y botones de acción unificados
+    // 3. Contenedor principal translúcido de la Hotbar y botones de acción unificados
     const panelWrap = document.createElement("div");
-    panelWrap.className = "mc-panel";
+    panelWrap.className = "mc-hotbar-traslucida";
     panelWrap.style.cssText = `
       padding: 4px;
       display: inline-flex;
       align-items: center;
       gap: 3px;
-      box-shadow: 0 0 0 3px #000;
       flex-wrap: wrap;
       justify-content: center;
     `;
@@ -270,13 +278,14 @@ export class HotbarPixel {
     this.btnQuitar = document.createElement("button");
     this.btnQuitar.className = "mc-boton";
     this.btnQuitar.style.cssText = `
-      background: var(--mc-gris);
+      background: rgba(45, 22, 22, 0.72);
       border: 2px solid;
-      border-color: #fff #555 #555 #fff;
+      border-color: rgba(255,255,255,0.3) rgba(0,0,0,0.85) rgba(0,0,0,0.85) rgba(255,255,255,0.3);
       padding: 3px 8px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      color: #b91c1c;
+      color: #fca5a5;
+      text-shadow: 1px 1px 0 #000;
       cursor: pointer;
       height: 48px;
       display: flex;
@@ -295,13 +304,14 @@ export class HotbarPixel {
     this.btnTimeLapse = document.createElement("button");
     this.btnTimeLapse.className = "mc-boton";
     this.btnTimeLapse.style.cssText = `
-      background: var(--mc-gris);
+      background: rgba(22, 42, 28, 0.72);
       border: 2px solid;
-      border-color: #fff #555 #555 #fff;
+      border-color: rgba(255,255,255,0.3) rgba(0,0,0,0.85) rgba(0,0,0,0.85) rgba(255,255,255,0.3);
       padding: 3px 8px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      color: #16a34a;
+      color: #86efac;
+      text-shadow: 1px 1px 0 #000;
       cursor: pointer;
       height: 48px;
       display: flex;
@@ -320,13 +330,14 @@ export class HotbarPixel {
     this.btnLabores = document.createElement("button");
     this.btnLabores.className = "mc-boton";
     this.btnLabores.style.cssText = `
-      background: var(--mc-gris);
+      background: rgba(20, 34, 46, 0.72);
       border: 2px solid;
-      border-color: #fff #555 #555 #fff;
+      border-color: rgba(255,255,255,0.3) rgba(0,0,0,0.85) rgba(0,0,0,0.85) rgba(255,255,255,0.3);
       padding: 3px 8px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      color: #0284c7;
+      color: #7dd3fc;
+      text-shadow: 1px 1px 0 #000;
       cursor: pointer;
       height: 48px;
       display: flex;
@@ -345,6 +356,32 @@ export class HotbarPixel {
     });
     actionsBox.appendChild(this.btnLabores);
 
+    // Botón Mochila / Cofre [I]
+    const btnMochila = document.createElement("button");
+    btnMochila.className = "mc-boton";
+    btnMochila.style.cssText = `
+      background: rgba(45, 34, 18, 0.72);
+      border: 2px solid;
+      border-color: rgba(255,255,255,0.3) rgba(0,0,0,0.85) rgba(0,0,0,0.85) rgba(255,255,255,0.3);
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fde68a;
+      text-shadow: 1px 1px 0 #000;
+      cursor: pointer;
+      height: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      border-radius: 0;
+    `;
+    btnMochila.innerHTML = `<span style="font-size:14px;">🎒</span><span>[I] Mochila</span>`;
+    btnMochila.title = "Abrir Mochila completa y Troje (intercambia Frijol, Calabaza, Sol y mazorcas) [I]";
+    btnMochila.addEventListener("click", () => this.callbacks?.onAbrirMochila?.());
+    actionsBox.appendChild(btnMochila);
+
     panelWrap.appendChild(actionsBox);
     this.el.appendChild(panelWrap);
 
@@ -361,13 +398,17 @@ export class HotbarPixel {
     this.actualizarVisual();
   }
 
+  public getStackActivo(): ItemStack | null {
+    return this.invJugador.slots[this.slotActivo] ?? null;
+  }
+
   public actualizarEstadoCrecimiento(reproduciendo: boolean): void {
     if (reproduciendo) {
       this.btnTimeLapse.innerHTML = `<span style="font-size:14px;">⏸</span><span>Pausa</span>`;
-      this.btnTimeLapse.style.color = "#ea580c";
+      this.btnTimeLapse.style.color = "#fdba74";
     } else {
       this.btnTimeLapse.innerHTML = `<span style="font-size:14px;">▶</span><span>Crecimiento</span>`;
-      this.btnTimeLapse.style.color = "#16a34a";
+      this.btnTimeLapse.style.color = "#86efac";
     }
   }
 
@@ -375,14 +416,9 @@ export class HotbarPixel {
     if (index < 0 || index >= 9) return;
     this.slotActivo = index;
     this.actualizarVisual();
+    this.mostrarNombreActual();
 
     const stack = this.invJugador.slots[index];
-    const def = stack ? DEFS[stack.id] : null;
-    const nombre = def ? def.nombre : "Manos Libres";
-    const detalle = stack?.meta?.variedad ? ` (${stack.meta.variedad})` : "";
-
-    this.mostrarAvisoItem(`${nombre}${detalle}`);
-
     const h = herramientaDeSlot(stack);
     this.callbacks?.onCambioSlot?.(this.slotActivo, h);
   }
@@ -391,6 +427,14 @@ export class HotbarPixel {
     let sig = (this.slotActivo + delta) % 9;
     if (sig < 0) sig += 9;
     this.seleccionarSlot(sig);
+  }
+
+  public mostrarNombreActual(): void {
+    const stack = this.invJugador.slots[this.slotActivo];
+    const def = stack ? DEFS[stack.id] : null;
+    const nombre = def ? def.nombre : "Manos Libres";
+    const detalle = stack?.meta?.variedad ? ` (${stack.meta.variedad})` : "";
+    this.mostrarAvisoItem(`${nombre}${detalle}`);
   }
 
   public mostrarAvisoItem(texto: string): void {

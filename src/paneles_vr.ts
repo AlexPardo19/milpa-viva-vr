@@ -93,6 +93,8 @@ export class PanelesVR {
   private sincronizandoSliderDia = false;
   private sincronizandoClima = false;
 
+  private texturasGUI: AdvancedDynamicTexture[] = [];
+
   constructor(
     scene: Scene,
     estadoCrecimiento: EstadoCrecimiento,
@@ -136,6 +138,15 @@ export class PanelesVR {
       ...leftRefs,
       ...rightRefs
     };
+
+    // Estética pixel art: fuente pixelada y esquinas rectas en todos los controles GUI 3D
+    for (const t of this.texturasGUI) {
+      for (const c of t.getDescendants(false)) {
+        const ctrl = c as any;
+        ctrl.fontFamily = "'Pixelify Sans', monospace";
+        if (typeof ctrl.cornerRadius === "number") ctrl.cornerRadius = 0;
+      }
+    }
   }
 
   public setVisible(visible: boolean): void {
@@ -171,6 +182,7 @@ export class PanelesVR {
     plane.rotation.x = Math.PI / 8.0;
 
     const tex = AdvancedDynamicTexture.CreateForMesh(plane, 1720, 1060);
+    this.texturasGUI.push(tex);
     this.ajustarMaterialPlano(plane);
 
     const bg = new Rectangle("consoleBg");
@@ -495,6 +507,7 @@ export class PanelesVR {
     plane.rotation.y = Math.PI / 6.5;
 
     const tex = AdvancedDynamicTexture.CreateForMesh(plane, 1500, 1460);
+    this.texturasGUI.push(tex);
     this.ajustarMaterialPlano(plane);
 
     const bg = new Rectangle("leftBg");
@@ -675,6 +688,7 @@ export class PanelesVR {
     plane.rotation.y = -Math.PI / 6.5;
 
     const tex = AdvancedDynamicTexture.CreateForMesh(plane, 1500, 1460);
+    this.texturasGUI.push(tex);
     this.ajustarMaterialPlano(plane);
 
     const bg = new Rectangle("rightBg");

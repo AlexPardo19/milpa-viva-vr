@@ -828,6 +828,25 @@ export class MaizEstilizado {
     }
   }
 
+  public setVariedad(variedad: TipoSemilla): void {
+    if (this.variedad === variedad && this.cobMat) return;
+    this.variedad = variedad;
+    const varCfg = VARIEDADES_MAIZ[this.variedad || "chalqueno"];
+    if (this.huskMat) {
+      const ch = Color3.FromHexString(varCfg.colorBracteasHex);
+      this.huskMat.diffuseColor = ch;
+      this.huskMat.emissiveColor = ch.scale(0.18);
+    }
+    if (this.cobMat) {
+      this.cobMat.diffuseTexture = this.generarTexturaGranos(varCfg.colorHex, this.lastCuajado);
+      const cg = Color3.FromHexString(varCfg.colorHex);
+      this.cobMat.emissiveColor = cg.scale(0.18);
+    }
+    this.lastDia = -1;
+    this.lastStage = "";
+    this.lastHeight = -1;
+  }
+
   /**
    * Actualiza los colores y morfología según la etapa fenológica, límite de crecimiento, secado y causa de muerte
    */
@@ -835,7 +854,9 @@ export class MaizEstilizado {
     const diaEntero = Math.floor(estado.dia);
     const etapa = estado.etapa;
     const p = estado.plantaInterna;
-    if (p.variedad) {
+    if (p.variedad && p.variedad !== this.variedad) {
+      this.setVariedad(p.variedad);
+    } else if (p.variedad) {
       this.variedad = p.variedad;
     }
 

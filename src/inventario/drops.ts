@@ -55,54 +55,121 @@ export class SistemaDrops {
 
     // Color según variedad o ítem
     let colorHex = "#fbbf24";
-    if (stack.meta?.variedad) {
+    let colorAcentoHex = "#fde68a";
+    if (stack.id === "semilla_azul" || stack.meta?.variedad?.toLowerCase().includes("azul")) {
+      colorHex = "#312e81";
+      colorAcentoHex = "#6366f1";
+    } else if (stack.id === "semilla_rojo" || stack.meta?.variedad?.toLowerCase().includes("rojo")) {
+      colorHex = "#991b1b";
+      colorAcentoHex = "#ef4444";
+    } else if (
+      stack.id === "semilla_palomero" ||
+      stack.meta?.variedad?.toLowerCase().includes("palomero")
+    ) {
+      colorHex = "#d97706";
+      colorAcentoHex = "#fef3c7";
+    } else if (stack.id === "semilla_chalqueno" || stack.id === "semilla" || stack.id === "grano") {
+      colorHex = "#eab308";
+      colorAcentoHex = "#fef08a";
+    } else if (stack.meta?.variedad) {
       const v = stack.meta.variedad.toLowerCase();
-      if (v.includes("azul") || v.includes("morado")) colorHex = "#4338ca";
-      else if (v.includes("rojo")) colorHex = "#b91c1c";
-      else if (v.includes("palomero")) colorHex = "#ea580c";
-      else if (v.includes("cacahuacintle")) colorHex = "#fef08a";
+      if (v.includes("cacahuacintle")) colorHex = "#fef08a";
       else colorHex = "#fbbf24";
     } else if (stack.id === "frijol") {
-      colorHex = "#7c3aed";
+      colorHex = "#581c87";
+      colorAcentoHex = "#c084fc";
     } else if (stack.id === "calabaza") {
-      colorHex = "#f97316";
+      colorHex = "#ea580c";
+      colorAcentoHex = "#fed7aa";
     }
+
+    const esSemilla =
+      stack.id.startsWith("semilla") ||
+      stack.id === "grano" ||
+      stack.id === "frijol" ||
+      stack.id === "calabaza";
 
     const mat = new StandardMaterial(`matDrop_${id}`, this.scene);
     mat.diffuseColor = Color3.FromHexString(colorHex);
-    mat.emissiveColor = Color3.FromHexString(colorHex).scale(0.4);
+    mat.emissiveColor = Color3.FromHexString(colorHex).scale(0.36);
     mat.specularColor = Color3.Black(); // Look opaco estilo Minecraft
 
-    // Modelo voxel/cilindro estilizado con reborde
-    const mesh = MeshBuilder.CreateCylinder(
-      `dropMesh_${id}`,
-      {
-        height: 0.22,
-        diameterTop: 0.055,
-        diameterBottom: 0.075,
-        tessellation: 8
-      },
-      this.scene
-    );
-    mesh.rotation.z = Math.PI / 3;
-    mesh.material = mat;
-    mesh.renderOutline = true;
-    mesh.outlineWidth = 0.012;
-    mesh.outlineColor = Color3.FromHexString("#1e293b");
-    mesh.parent = root;
+    let mesh: Mesh;
+    if (esSemilla) {
+      // Bolsita voxel estilizada de semillas con cinta de color y granos asomando
+      mesh = MeshBuilder.CreateBox(
+        `dropMesh_${id}`,
+        { width: 0.14, height: 0.15, depth: 0.09 },
+        this.scene
+      );
+      mesh.material = mat;
+      mesh.renderOutline = true;
+      mesh.outlineWidth = 0.012;
+      mesh.outlineColor = Color3.FromHexString("#1e293b");
+      mesh.parent = root;
 
-    // Totomoxtle / bráctea en la base
-    const matHusk = new StandardMaterial(`matDropHusk_${id}`, this.scene);
-    matHusk.diffuseColor = Color3.FromHexString("#fde68a");
-    matHusk.specularColor = Color3.Black();
-    const husk = MeshBuilder.CreateCylinder(
-      `dropHusk_${id}`,
-      { height: 0.08, diameterTop: 0.08, diameterBottom: 0.04, tessellation: 6 },
-      this.scene
-    );
-    husk.position.y = -0.07;
-    husk.material = matHusk;
-    husk.parent = mesh;
+      const matBolsa = new StandardMaterial(`matDropSack_${id}`, this.scene);
+      matBolsa.diffuseColor = Color3.FromHexString("#d6b888");
+      matBolsa.emissiveColor = Color3.FromHexString("#92400e").scale(0.28);
+      matBolsa.specularColor = Color3.Black();
+
+      const cuello = MeshBuilder.CreateBox(
+        `dropHusk_${id}`,
+        { width: 0.11, height: 0.035, depth: 0.075 },
+        this.scene
+      );
+      cuello.position.y = 0.092;
+      cuello.material = matBolsa;
+      cuello.renderOutline = true;
+      cuello.outlineWidth = 0.008;
+      cuello.parent = mesh;
+
+      const matGrano = new StandardMaterial(`matDropGrain_${id}`, this.scene);
+      matGrano.diffuseColor = Color3.FromHexString(colorAcentoHex);
+      matGrano.emissiveColor = Color3.FromHexString(colorAcentoHex).scale(0.42);
+      matGrano.specularColor = Color3.Black();
+      [-0.03, 0, 0.03].forEach((gx, idx) => {
+        const g = MeshBuilder.CreateBox(
+          `dropGrain_${id}_${idx}`,
+          { width: 0.028, height: 0.028, depth: 0.028 },
+          this.scene
+        );
+        g.position.set(gx, 0.122, idx === 1 ? 0.015 : -0.01);
+        g.material = matGrano;
+        g.parent = mesh;
+      });
+    } else {
+      // Modelo voxel/cilindro estilizado con reborde
+      mesh = MeshBuilder.CreateCylinder(
+        `dropMesh_${id}`,
+        {
+          height: 0.22,
+          diameterTop: 0.055,
+          diameterBottom: 0.075,
+          tessellation: 8
+        },
+        this.scene
+      );
+      mesh.rotation.z = Math.PI / 3;
+      mesh.material = mat;
+      mesh.renderOutline = true;
+      mesh.outlineWidth = 0.012;
+      mesh.outlineColor = Color3.FromHexString("#1e293b");
+      mesh.parent = root;
+
+      // Totomoxtle / bráctea en la base
+      const matHusk = new StandardMaterial(`matDropHusk_${id}`, this.scene);
+      matHusk.diffuseColor = Color3.FromHexString("#fde68a");
+      matHusk.specularColor = Color3.Black();
+      const husk = MeshBuilder.CreateCylinder(
+        `dropHusk_${id}`,
+        { height: 0.08, diameterTop: 0.08, diameterBottom: 0.04, tessellation: 6 },
+        this.scene
+      );
+      husk.position.y = -0.07;
+      husk.material = matHusk;
+      husk.parent = mesh;
+    }
 
     // Impulso físico aleatorio estilo Minecraft
     const ang = Math.random() * Math.PI * 2;

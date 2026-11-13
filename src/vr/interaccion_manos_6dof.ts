@@ -20,7 +20,10 @@ import {
 import { SurcoMilpa } from "../surco_milpa";
 import { CanastaRecoleccion3D } from "./canasta_cosecha";
 import { Herramientas3D } from "../educativo/herramientas_3d";
-import { HerramientaTipo } from "../educativo/estado_educativo";
+import {
+  HerramientaTipo,
+  variedadDeHerramienta
+} from "../educativo/estado_educativo";
 import { ParticulasEducativas } from "../educativo/particulas_educativas";
 import { ManoVR } from "./mano_vr";
 import { AjustesSistema } from "../juego/ajustes";
@@ -286,8 +289,13 @@ export class InteraccionManos6DoF {
         break;
       }
 
-      case "semilla": {
-        const resS = this.surco.sembrar(nodoId);
+      case "semilla":
+      case "semilla_chalqueno":
+      case "semilla_azul":
+      case "semilla_rojo":
+      case "semilla_palomero": {
+        const varElegida = variedadDeHerramienta(this.herramientaActiva) ?? undefined;
+        const resS = this.surco.sembrar(nodoId, varElegida);
         mano.pulso(0.3, 25);
         if (this.herramientas && resS.exito) {
           this.herramientas.animarSemilla();

@@ -12,12 +12,18 @@ import {
   Color3,
   StandardMaterial,
   DynamicTexture,
+  Texture,
   Mesh,
   MeshBuilder,
   TransformNode,
   ShadowGenerator,
   Animation
 } from "@babylonjs/core";
+import {
+  configurarSamplingPixel,
+  crearTexMaderaPixel,
+  dibujarMarcoLetreroPixel,
+} from "../ui/texturas_pixel_3d";
 import { VariedadMaizConfig, VARIEDADES_MAIZ } from "../nucleo";
 
 export class CanastaRecoleccion3D {
@@ -94,7 +100,8 @@ export class CanastaRecoleccion3D {
   private construirBadge(): void {
     const W = 256;
     const H = 120;
-    this.badgeTex = new DynamicTexture("texBadgeCanasta", { width: W, height: H }, this.scene, true);
+    this.badgeTex = new DynamicTexture("texBadgeCanasta", { width: W, height: H }, this.scene, false, Texture.NEAREST_SAMPLINGMODE);
+    configurarSamplingPixel(this.badgeTex);
 
     const mat = new StandardMaterial("matBadgeCanasta", this.scene);
     mat.diffuseTexture = this.badgeTex;
@@ -114,18 +121,13 @@ export class CanastaRecoleccion3D {
     const W = 256;
     const H = 120;
 
-    ctx.fillStyle = "#fef3c7";
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.strokeStyle = "#ca8a04";
-    ctx.lineWidth = 5;
-    ctx.strokeRect(3, 3, W - 6, H - 6);
+    dibujarMarcoLetreroPixel(ctx, W, H, "#fef3c7", "#451a03", "#ca8a04", 4);
 
     ctx.fillStyle = "#854d0e";
-    ctx.font = "bold 20px Trebuchet MS, sans-serif";
+    ctx.font = "bold 20px 'Pixelify Sans', monospace";
     ctx.fillText(`🧺 Cosecha: ${this.totalCosechados} / 6 Elotes`, 14, 28);
 
-    ctx.font = "bold 15px Trebuchet MS, sans-serif";
+    ctx.font = "bold 15px 'Pixelify Sans', monospace";
     ctx.fillStyle = "#d97706";
     ctx.fillText(`🌽 Chalqueño: ${this.conteoPorVariedad.chalqueno}`, 14, 52);
     ctx.fillStyle = "#4338ca";
@@ -137,7 +139,7 @@ export class CanastaRecoleccion3D {
     ctx.fillText(`🟠 Palomero: ${this.conteoPorVariedad.palomero}`, 140, 76);
 
     ctx.fillStyle = "#15803d";
-    ctx.font = "bold 12px Trebuchet MS, sans-serif";
+    ctx.font = "bold 12px 'Pixelify Sans', monospace";
     ctx.fillText(
       `🌿 Quelites: ${this.quelites} | 🫘 Frijol: ${this.frijol} | 🌼 Calab.: ${this.calabaza}`,
       10,
@@ -279,8 +281,9 @@ export class CarritoAgricola3D {
 
   private construirEstructura(shadowGen: ShadowGenerator | null): void {
     const woodMat = new StandardMaterial("matCarritoMadera", this.scene);
-    woodMat.diffuseColor = Color3.FromHexString("#92400e");
-    woodMat.emissiveColor = Color3.FromHexString("#451a03").scale(0.4);
+    woodMat.diffuseTexture = crearTexMaderaPixel(this.scene, false, 2, 1);
+    woodMat.diffuseColor = Color3.FromHexString("#e2be94");
+    woodMat.emissiveColor = Color3.FromHexString("#451a03").scale(0.32);
 
     // Caja de carga de la carretilla
     const caja = MeshBuilder.CreateBox("cajaCarro", {
@@ -291,28 +294,22 @@ export class CarritoAgricola3D {
     caja.position.set(0, 0.28, 0);
     caja.material = woodMat;
     caja.parent = this.root;
-    caja.renderOutline = true;
-    caja.outlineWidth = 0.015;
-    caja.outlineColor = Color3.FromHexString("#25330f");
 
-    // Ruedas de madera en los extremos
+    // Ruedas cuadradas/octogonales voxel en los extremos
     const wheelMat = new StandardMaterial("matRuedaCarro", this.scene);
-    wheelMat.diffuseColor = Color3.FromHexString("#78350f");
+    wheelMat.diffuseTexture = crearTexMaderaPixel(this.scene, false, 1, 1);
+    wheelMat.diffuseColor = Color3.FromHexString("#cfa372");
 
     const posX = [-0.45, 0.45];
     for (const x of posX) {
-      const rueda = MeshBuilder.CreateCylinder(`rueda_${x}`, {
-        diameter: 0.28,
-        height: 0.06,
-        tessellation: 16
+      const rueda = MeshBuilder.CreateBox(`rueda_${x}`, {
+        width: 0.08,
+        height: 0.28,
+        depth: 0.28
       }, this.scene);
-      rueda.rotation.z = Math.PI / 2;
       rueda.position.set(x, 0.14, 0);
       rueda.material = wheelMat;
       rueda.parent = this.root;
-      rueda.renderOutline = true;
-      rueda.outlineWidth = 0.012;
-      rueda.outlineColor = Color3.FromHexString("#25330f");
       this.ruedas.push(rueda);
     }
 

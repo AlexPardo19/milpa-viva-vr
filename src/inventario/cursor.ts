@@ -131,11 +131,18 @@ export function herramientaDeSlot(s: ItemStack | null): HerramientaTipo {
   const mapa: Record<string, HerramientaTipo> = {
     azada: "azada",
     semilla: "semilla",
+    semilla_chalqueno: "semilla_chalqueno",
+    semilla_azul: "semilla_azul",
+    semilla_rojo: "semilla_rojo",
+    semilla_palomero: "semilla_palomero",
+    grano: "semilla",
     regadera: "regadera",
     abono: "abono",
     sol: "sol",
     guante: "cosecha",
     cosecha: "cosecha",
+    frijol: "frijol",
+    calabaza: "calabaza",
     mano: "mano"
   };
   return mapa[s.id] ?? "mano";

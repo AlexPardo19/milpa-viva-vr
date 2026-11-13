@@ -13,12 +13,14 @@ import {
   Color3,
   StandardMaterial,
   DynamicTexture,
+  Texture,
   Mesh,
   MeshBuilder
 } from "@babylonjs/core";
 import { ManoVR } from "./mano_vr";
 import { NodoSurco } from "../surco_milpa";
 import { _tmpA } from "../juego/util";
+import { configurarSamplingPixel } from "../ui/texturas_pixel_3d";
 
 export class RelojMuneca {
   readonly scene: Scene;
@@ -30,7 +32,8 @@ export class RelojMuneca {
 
   constructor(scene: Scene) {
     this.scene = scene;
-    this.tex = new DynamicTexture("relojMunecaTex", { width: 512, height: 340 }, scene, true);
+    this.tex = new DynamicTexture("relojMunecaTex", { width: 512, height: 340 }, scene, false, Texture.NEAREST_SAMPLINGMODE);
+    configurarSamplingPixel(this.tex);
 
     const mat = new StandardMaterial("matRelojMuneca", scene);
     mat.diffuseTexture = this.tex;
@@ -95,11 +98,11 @@ export class RelojMuneca {
     ctx.strokeRect(6, 6, W - 12, H - 12);
 
     ctx.fillStyle = "#fef08a";
-    ctx.font = "bold 28px Trebuchet MS, sans-serif";
+    ctx.font = "bold 28px 'Pixelify Sans', monospace";
     ctx.fillText(`⌚ Estación ${nodo.id + 1} · Día ${dia}`, 24, 44);
 
     ctx.fillStyle = "#e2e8f0";
-    ctx.font = "bold 22px Trebuchet MS, sans-serif";
+    ctx.font = "bold 22px 'Pixelify Sans', monospace";
     ctx.fillText(`Etapa: ${nodo.estadoCrec.etapa}`, 24, 82);
 
     // Barra de Agua
@@ -120,7 +123,7 @@ export class RelojMuneca {
 
     // Indicador de Sinergia Tríada 🔺
     ctx.fillStyle = triadaOk ? "#fbbf24" : "#94a3b8";
-    ctx.font = "bold 22px Trebuchet MS, sans-serif";
+    ctx.font = "bold 22px 'Pixelify Sans', monospace";
     ctx.fillText(
       triadaOk ? "🔺 Sinergia Tríada ACTIVA (+15%)" : "△ Tríada: asocia frijol y calabaza",
       24,
@@ -130,11 +133,11 @@ export class RelojMuneca {
     // Alerta 🔔
     if (alerta) {
       ctx.fillStyle = "#fca5a5";
-      ctx.font = "bold 22px Trebuchet MS, sans-serif";
+      ctx.font = "bold 22px 'Pixelify Sans', monospace";
       ctx.fillText(`🔔 ${alerta}`, 24, 314);
     } else {
       ctx.fillStyle = "#a7f3d0";
-      ctx.font = "20px Trebuchet MS, sans-serif";
+      ctx.font = "20px 'Pixelify Sans', monospace";
       ctx.fillText(`✨ Cuajado: ${Math.round(nodo.plantaInterna.cuajado * 100)}%`, 24, 314);
     }
 

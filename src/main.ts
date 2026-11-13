@@ -47,6 +47,7 @@ import { MaizEstilizado } from "./maiz_estilizado";
 import { PanelesVR } from "./paneles_vr";
 import { SurcoMilpa } from "./surco_milpa";
 import { CarritoAgricola3D } from "./vr/canasta_cosecha";
+import { registrarSolidoDesdeNodo } from "./colisiones";
 import { MesaClimaPrejuego } from "./vr/mesa_clima_prejuego";
 import { LocomocionVR } from "./vr/locomocion_vr";
 import { InteraccionManos6DoF } from "./vr/interaccion_manos_6dof";
@@ -59,7 +60,12 @@ import { AudioSintetizador } from "./audio_sintetizador";
 import { ControladorJugador } from "./controlador_jugador";
 
 // Módulos educativos interactivos
-import { EstadoEducativo, HerramientaTipo } from "./educativo/estado_educativo";
+import {
+  EstadoEducativo,
+  HerramientaTipo,
+  esHerramientaSemillaMaiz,
+  variedadDeHerramienta
+} from "./educativo/estado_educativo";
 import { ParticulasEducativas } from "./educativo/particulas_educativas";
 import { Herramientas3D } from "./educativo/herramientas_3d";
 import { UIEducativa } from "./educativo/ui_infantil";
@@ -75,17 +81,26 @@ import { DirectorEventos } from "./juego/director_eventos";
 import { TriadaViva } from "./juego/triada_viva";
 import { FogonCocina } from "./juego/fogon_cocina";
 import { BancoSemillas } from "./juego/banco_semillas";
+import { DispensadorSemillas } from "./juego/dispensador_semillas";
 import { CodiceMaiz } from "./juego/codice";
 import { MisionesSistema } from "./juego/misiones";
 import { AlmacenMazorcas } from "./juego/almacen_mazorcas";
 import { ModalControlesBienvenida } from "./juego/modal_controles";
+import {
+  DificultadMundo,
+  PartidaGuardada,
+  PresetClimaMundo,
+  climaDesdePreset,
+  guardarPartida
+} from "./juego/persistencia_mundo";
 
 // Sistema de Inventario y Drops Estilo Minecraft
 import { cargarFuentePixel } from "./ui/texto_pixel";
-import { Inventario, DEFS } from "./inventario/inventario";
+import { Inventario, DEFS, variedadDeItemId } from "./inventario/inventario";
 import { CursorInventario } from "./inventario/cursor";
 import { SistemaDrops } from "./inventario/drops";
 import { HotbarPixel, ModalCofreTroje } from "./ui/panel_inventario";
+import { MenuPausaMinecraft, MenuPrincipalMinecraft } from "./ui/menu_minecraft";
 
 // ---------------------------------------------------------------------------
 // 1. Estado global de la simulación
@@ -131,10 +146,20 @@ let directorEventos: DirectorEventos | null = null;
 let triadaViva: TriadaViva | null = null;
 let fogonCocina: FogonCocina | null = null;
 let bancoSemillas: BancoSemillas | null = null;
+let dispensadorSemillas: DispensadorSemillas | null = null;
 let codiceMaiz: CodiceMaiz | null = null;
 let misionesSistema: MisionesSistema | null = null;
 let almacenMazorcas: AlmacenMazorcas | null = null;
 let modalControles: ModalControlesBienvenida | null = null;
+let menuPrincipal: MenuPrincipalMinecraft | null = null;
+let menuPausa: MenuPausaMinecraft | null = null;
+
+// Estado de la partida actual (para Guardar / Cargar estilo Minecraft)
+let idMundoActivo = "milpa-mundo-1";
+let nombreMundoActivo = "Mi Milpa Criolla";
+let dificultadMundo: DificultadMundo = "normal";
+let presetClimaMundo: PresetClimaMundo = "templado";
+let semillaMundoStr = "CHALCO-2026";
 
 // Referencias a los componentes de inventario y drops
 let inventarioJugador: Inventario | null = null;
@@ -194,18 +219,18 @@ async function crearEscena(): Promise<Scene> {
   await cargarFuentePixel();
   const scene = new Scene(engine);
 
-  // A. Cámara orbital inicial enfocada en el huerto y montículo
+  // A. Cámara orbital inicial enfocada panorámicamente en la granja (milpa + molino + animales) para el Menú Principal
   const camera = new ArcRotateCamera(
     "camera",
-    -Math.PI / 2.0,
-    Math.PI / 2.45,
-    7.5,
-    new Vector3(0, 0.5, 0),
+    -Math.PI * 0.68,
+    1.18,
+    22.5,
+    new Vector3(3.0, 1.8, 1.5),
     scene
   );
   camaraPrincipal = camera;
   camera.lowerRadiusLimit = 2.0;
-  camera.upperRadiusLimit = 25.0;
+  camera.upperRadiusLimit = 36.0;
   camera.upperBetaLimit = Math.PI / 2.05;
   camera.wheelPrecision = 28;
   camera.attachControl(canvas, true);
@@ -261,12 +286,11 @@ async function crearEscena(): Promise<Scene> {
         ambiente?.aplicarClima(clima, metricas);
         panelClima?.actualizarValoresUI();
         locomocionVR?.teletransportarANodo(0);
-        controladorJugador?.teletransportarA(new Vector3(0, 1.55, -2.1));
         controladorJugador?.activarModo("fps");
         espantapajaros?.decir(
-          "¡Bienvenido al surco! 🌽 Ara con la azada [1], siembra maíz [2] junto con frijol [B] y calabaza [N]."
+          "¡Bienvenido al surco! 🌽 Ara con la azada [2], siembra maíz [3] junto con frijol [8]/[B] y calabaza [9]/[N]."
         );
-        uiEdu?.mostrarToast("🌱 ¡Llegaste al surco de milpa! Usa la azada para arar.");
+        uiEdu?.mostrarToast("🌱 ¡Llegaste al surco de milpa! Usa la azada [2] para arar.");
       },
       onCambioClimaPreview: (climaCfg) => {
         Object.assign(clima, climaCfg);
@@ -308,6 +332,9 @@ async function crearEscena(): Promise<Scene> {
     xrExperience,
     ajustesSistema
   );
+  locomocionVR.onTeletransportar = (pos, mirarA) => {
+    controladorJugador?.teletransportarA(pos, mirarA);
+  };
   interaccion6DoF = new InteraccionManos6DoF(
     scene,
     surcoMilpa,
@@ -326,7 +353,6 @@ async function crearEscena(): Promise<Scene> {
     if (interaccion6DoF) interaccion6DoF.herramientaActiva = herramienta;
     controladorJugador?.equipar(herramienta);
     uiEdu?.actualizarUI();
-    uiEdu?.mostrarToast(`🧰 Herramienta equipada del cinturón: ${herramienta.toUpperCase()}`);
   };
   relojMuneca = new RelojMuneca(scene);
   uiPoke = new UiPoke(scene, audioSintetizador);
@@ -428,16 +454,46 @@ async function crearEscena(): Promise<Scene> {
 
   // Inicializar Sistema de Inventario y Hotbar Estilo Minecraft
   inventarioJugador = new Inventario(36);
-  // Cargar herramientas iniciales en la Hotbar (slots 0-8)
-  inventarioJugador.slots[0] = { id: "mano", cantidad: 1 };
-  inventarioJugador.slots[1] = { id: "azada", cantidad: 1 };
-  inventarioJugador.slots[2] = { id: "semilla", cantidad: 64, meta: { variedad: "Chalqueño" } };
-  inventarioJugador.slots[3] = { id: "regadera", cantidad: 1 };
-  inventarioJugador.slots[4] = { id: "abono", cantidad: 32 };
-  inventarioJugador.slots[5] = { id: "sol", cantidad: 1 };
-  inventarioJugador.slots[6] = { id: "cosecha", cantidad: 1 };
-  inventarioJugador.slots[7] = { id: "frijol", cantidad: 16 };
-  inventarioJugador.slots[8] = { id: "calabaza", cantidad: 16 };
+
+  function restablecerInventarioInicial(): void {
+    if (!inventarioJugador) return;
+    for (let i = 0; i < inventarioJugador.tamano; i++) {
+      inventarioJugador.slots[i] = null;
+    }
+    // Hotbar (0-8): Manos, Azada, 4 Razas de Semillas separadas, Agua, Abono, Cosecha
+    inventarioJugador.slots[0] = { id: "mano", cantidad: 1 };
+    inventarioJugador.slots[1] = { id: "azada", cantidad: 1 };
+    inventarioJugador.slots[2] = { id: "semilla_chalqueno", cantidad: 16 };
+    inventarioJugador.slots[3] = { id: "semilla_azul", cantidad: 16 };
+    inventarioJugador.slots[4] = { id: "semilla_rojo", cantidad: 16 };
+    inventarioJugador.slots[5] = { id: "semilla_palomero", cantidad: 16 };
+    inventarioJugador.slots[6] = { id: "regadera", cantidad: 1 };
+    inventarioJugador.slots[7] = { id: "abono", cantidad: 32 };
+    inventarioJugador.slots[8] = { id: "cosecha", cantidad: 1 };
+    // Mochila (9-11): Cultivos asociados (Frijol/Calabaza) y Amuleto Sol +15d
+    inventarioJugador.slots[9] = { id: "frijol", cantidad: 16 };
+    inventarioJugador.slots[10] = { id: "calabaza", cantidad: 16 };
+    inventarioJugador.slots[11] = { id: "sol", cantidad: 1 };
+    inventarioJugador.notificar();
+  }
+  restablecerInventarioInicial();
+
+  dispensadorSemillas = new DispensadorSemillas(
+    scene,
+    inventarioJugador,
+    audioSintetizador,
+    ambiente.shadowGen
+  );
+  dispensadorSemillas.onMensajeToast = (msg) => uiEdu?.mostrarToast(msg);
+  dispensadorSemillas.onActualizarUI = () => hotbarPixel?.actualizarVisual();
+
+  // Colisiones físicas: los objetos sólidos de la parcela ya no se pueden atravesar
+  if (almacenMazorcas) registrarSolidoDesdeNodo(almacenMazorcas.raiz, "almacen", 0.05);
+  if (fogonCocina) registrarSolidoDesdeNodo(fogonCocina.raiz, "fogon", 0.05);
+  if (bancoSemillas) registrarSolidoDesdeNodo(bancoSemillas.raiz, "banco", 0.05);
+  if (codiceMaiz) registrarSolidoDesdeNodo(codiceMaiz.raiz, "codice", 0.05);
+  if (espantapajaros) registrarSolidoDesdeNodo(espantapajaros.root, "espantapajaros", 0.0);
+  if (mesaClimaPrejuego) registrarSolidoDesdeNodo(mesaClimaPrejuego.root, "mesaClima", 0.02);
 
   inventarioTroje = new Inventario(27);
   // Sincronizar estado inicial del almacén con la troje
@@ -478,7 +534,17 @@ async function crearEscena(): Promise<Scene> {
       VARIEDADES_MAIZ.palomero.nombre
     );
     almacenMazorcas.actualizarVisualesTroje();
+    almacenMazorcas.guardarAlmacen();
+    almacenMazorcas.onCambioInventario?.();
   });
+
+  function tipoPorNombreVariedad(nombre?: string): "chalqueno" | "azul" | "rojo" | "palomero" {
+    const l = (nombre || "").toLowerCase();
+    if (l.includes("azul")) return "azul";
+    if (l.includes("rojo")) return "rojo";
+    if (l.includes("palomero")) return "palomero";
+    return "chalqueno";
+  }
 
   cursorInventario = new CursorInventario();
   hotbarPixel = new HotbarPixel(inventarioJugador, cursorInventario, {
@@ -509,12 +575,10 @@ async function crearEscena(): Promise<Scene> {
       polinizacionSistema?.polinizarManual(id);
     },
     onSembrarFrijol: () => {
-      const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
-      triadaViva?.sembrarAsociadoEnNodo(id, "frijol");
+      ejecutarAccion("frijol");
     },
     onSembrarCalabaza: () => {
-      const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
-      triadaViva?.sembrarAsociadoEnNodo(id, "calabaza");
+      ejecutarAccion("calabaza");
     },
     onColocarTutor: () => {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
@@ -525,6 +589,17 @@ async function crearEscena(): Promise<Scene> {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
       const res = surcoMilpa?.colocarProteccion(id);
       if (res) uiEdu?.mostrarToast(res.mensaje);
+    },
+    onSol: () => {
+      ejecutarAccion("sol");
+    },
+    onAbrirMochila: () => {
+      controladorJugador?.liberarPuntero();
+      modalCofreTroje?.alternar();
+    },
+    onAbrirDispensador: () => {
+      controladorJugador?.liberarPuntero();
+      dispensadorSemillas?.abrir();
     }
   });
 
@@ -537,10 +612,18 @@ async function crearEscena(): Promise<Scene> {
     (stack) => {
       audioSintetizador?.campanita(controladorJugador?.posicionMundo ?? Vector3.Zero());
       const nom = stack.meta?.variedad ? `Mazorca de ${stack.meta.variedad}` : stack.id;
-      uiEdu?.mostrarToast(`🌽 +${stack.cantidad} ${nom} al inventario`);
-      if (carritoAgricola?.canasta) {
-        carritoAgricola.canasta.totalCosechados += stack.cantidad;
+      uiEdu?.mostrarToast(`🌽 +${stack.cantidad} ${nom}`);
+      if (stack.id === "mazorca" && carritoAgricola?.canasta) {
+        const tipoVar = tipoPorNombreVariedad(stack.meta?.variedad);
+        for (let i = 0; i < stack.cantidad; i++) {
+          carritoAgricola.canasta.depositarMazorca(
+            VARIEDADES_MAIZ[tipoVar],
+            undefined,
+            stack.meta?.calidad ?? 0.9
+          );
+        }
       }
+      almacenMazorcas?.onCambioInventario?.();
       almacenMazorcas?.actualizarVisualesTroje();
     },
     () => {
@@ -609,6 +692,9 @@ async function crearEscena(): Promise<Scene> {
     cinturonVR?.seleccionar(h);
     uiEdu?.actualizarUI();
   };
+  controladorJugador.onWheelHotbar = (dir) => {
+    hotbarPixel?.avanzarSlot(dir);
+  };
   controladorJugador.onInteractuarObjeto3D = (tipo, meshName, nodoId) => {
     const id = nodoId ?? (surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0);
     switch (tipo) {
@@ -619,9 +705,11 @@ async function crearEscena(): Promise<Scene> {
         break;
       case "almacen":
         if (inventarioJugador && inventarioJugador.cuenta("mazorca") > 0) {
+          const cantMov = inventarioJugador.cuenta("mazorca");
           inventarioJugador.moverTodoDe(inventarioTroje!, "mazorca");
+          carritoAgricola?.canasta?.retirarMazorca(undefined, cantMov);
           audioSintetizador?.cosecharExito(almacenMazorcas?.raiz.position ?? Vector3.Zero());
-          uiEdu?.mostrarToast(`🏛️ ¡Guardaste tus mazorcas en la Troje! Total en troje: ${inventarioTroje?.cuenta("mazorca")}`);
+          uiEdu?.mostrarToast(`🏛️ +${cantMov} mazorcas guardadas en la Troje`);
         } else {
           controladorJugador?.liberarPuntero();
           modalCofreTroje?.alternar();
@@ -645,6 +733,14 @@ async function crearEscena(): Promise<Scene> {
       case "banco":
         controladorJugador?.liberarPuntero();
         bancoSemillas?.alternarModal();
+        break;
+      case "dispensador":
+        if (meshName.startsWith("dispensadorBoton_")) {
+          dispensadorSemillas?.interactuar(meshName);
+        } else {
+          controladorJugador?.liberarPuntero();
+          dispensadorSemillas?.abrir();
+        }
         break;
       case "codice":
         controladorJugador?.liberarPuntero();
@@ -689,9 +785,13 @@ async function crearEscena(): Promise<Scene> {
       ejecutarAccion(estadoEdu.herramientaSeleccionada);
     }
   };
-  controladorJugador.onToast = (msg) => uiEdu?.mostrarToast(msg);
+  controladorJugador.onToast = (msg) => {
+    if (menuPrincipal?.estaAbierto()) return;
+    uiEdu?.mostrarToast(msg);
+  };
 
   // Exponer referencias globales para depuración y pruebas automatizadas
+  (window as any).camaraPrincipal = camera;
   (window as any).controladorJugador = controladorJugador;
   (window as any).espantapajaros = espantapajaros;
   (window as any).audioSintetizador = audioSintetizador;
@@ -701,6 +801,10 @@ async function crearEscena(): Promise<Scene> {
   (window as any).codiceMaiz = codiceMaiz;
   (window as any).directorEventos = directorEventos;
   (window as any).almacenMazorcas = almacenMazorcas;
+  (window as any).dispensadorSemillas = dispensadorSemillas;
+  (window as any).faunaMilpa = faunaMilpa;
+  (window as any).hotbarPixel = hotbarPixel;
+  (window as any).inventarioJugador = inventarioJugador;
 
   // H. Paneles espaciales 3D (disponibles en Modo Científico y WebXR)
   paneles = new PanelesVR(scene, estadoCrecimiento, clima, metricas, {
@@ -817,6 +921,8 @@ async function crearEscena(): Promise<Scene> {
     sincronizarNodoConUI();
   }
 
+  let mazorcasCosechadasEstaSesion = 0;
+
   // J. Ejecución de Acciones Agronómicas y Educativas
   function ejecutarAccion(herramienta: HerramientaTipo): void {
     const nodoId = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
@@ -834,25 +940,131 @@ async function crearEscena(): Promise<Scene> {
           busEventos.emitir({ t: "arado", nodo: nodoId, potencia: 1.0 });
           uiEdu?.mostrarToast(resA.mensaje);
           if (nodo.tierraArada >= 100 && !nodo.sembrada) {
-            espantapajaros?.decir(`¡Estación ${nodoId + 1} lista! Ahora toma las semillas [2] y siembra.`);
+            espantapajaros?.decir(`¡Estación ${nodoId + 1} lista! Ahora toma las semillas [3-6] y siembra.`);
           }
         }
         break;
 
       case "semilla":
-        if (surcoMilpa && nodo) {
-          bancoSemillas?.aplicarLoteActivoASurco();
-          const resS = surcoMilpa.sembrar(nodoId);
+      case "semilla_chalqueno":
+      case "semilla_azul":
+      case "semilla_rojo":
+      case "semilla_palomero":
+        if (surcoMilpa && nodo && inventarioJugador) {
+          const varHerr = variedadDeHerramienta(herramienta);
+          const slotActivo = hotbarPixel ? hotbarPixel.slotActivo : 0;
+          const stackActivo = inventarioJugador.slots[slotActivo];
+          let slotSemillaIdx = -1;
+          let variedadElegida = varHerr ?? nodo.variedad;
+
+          if (varHerr) {
+            const idEsperado = `semilla_${varHerr}`;
+            if (stackActivo && stackActivo.id === idEsperado && stackActivo.cantidad > 0) {
+              slotSemillaIdx = slotActivo;
+            } else {
+              slotSemillaIdx = inventarioJugador.slots.findIndex(
+                (s) => s && s.id === idEsperado && s.cantidad > 0
+              );
+            }
+          } else if (stackActivo && variedadDeItemId(stackActivo.id) && stackActivo.cantidad > 0) {
+            variedadElegida = variedadDeItemId(stackActivo.id)!;
+            slotSemillaIdx = slotActivo;
+          } else if (
+            stackActivo &&
+            (stackActivo.id === "semilla" || stackActivo.id === "grano") &&
+            stackActivo.cantidad > 0
+          ) {
+            variedadElegida = stackActivo.meta?.variedad
+              ? tipoPorNombreVariedad(stackActivo.meta.variedad)
+              : nodo.variedad;
+            slotSemillaIdx = slotActivo;
+          } else {
+            slotSemillaIdx = inventarioJugador.slots.findIndex(
+              (s) => s && (!!variedadDeItemId(s.id) || s.id === "semilla" || s.id === "grano") && s.cantidad > 0
+            );
+            if (slotSemillaIdx >= 0) {
+              const sFound = inventarioJugador.slots[slotSemillaIdx]!;
+              variedadElegida =
+                variedadDeItemId(sFound.id) ??
+                (sFound.meta?.variedad ? tipoPorNombreVariedad(sFound.meta.variedad) : nodo.variedad);
+            }
+          }
+
+          if (slotSemillaIdx < 0) {
+            uiEdu?.mostrarToast(
+              `⚠️ ¡Te quedaste sin semillas de esa raza! Abre el Dispensador de Semillas [U] para reponer.`
+            );
+            espantapajaros?.decir(
+              `🌰 Se agotaron esas semillas. Acude al Dispensador Comunal de Semillas [U] en el patio.`
+            );
+            break;
+          }
+
+          const loteActivo = bancoSemillas?.obtenerLoteActivo();
+          const rasgosCompat =
+            loteActivo && tipoPorNombreVariedad(loteActivo.raza) === variedadElegida
+              ? loteActivo.rasgos
+              : undefined;
+
+          const resS = surcoMilpa.sembrar(nodoId, variedadElegida, rasgosCompat);
           if (resS.exito) {
+            const idConsumido = inventarioJugador.slots[slotSemillaIdx]!.id;
+            inventarioJugador.consumirUno(slotSemillaIdx);
+            hotbarPixel?.actualizarVisual();
             herramientas3D?.animarSemilla();
             audioSintetizador?.semillas(nodo.posicionMundo);
             const varCfg = VARIEDADES_MAIZ[nodo.variedad];
             busEventos.emitir({ t: "siembra", nodo: nodoId, variedad: varCfg.nombre, granosAcertados: 3 });
+            const restantes = inventarioJugador.cuenta(idConsumido);
+            if (restantes === 0) {
+              uiEdu?.mostrarToast(
+                `${resS.mensaje} ⚠️ (Se agotó tu pila; repón más en el Dispensador [U])`
+              );
+            } else {
+              uiEdu?.mostrarToast(resS.mensaje);
+            }
             espantapajaros?.decir(
-              `¡Sembraste ${varCfg.nombre}! Puedes asociar Frijol [B] y Calabaza [N] o regar con [3].`
+              `¡Sembraste ${varCfg.nombre}! Asocia Frijol [B] y Calabaza [N] o riega con [7].`
             );
+          } else {
+            uiEdu?.mostrarToast(resS.mensaje);
           }
-          uiEdu?.mostrarToast(resS.mensaje);
+        }
+        break;
+
+      case "frijol":
+        if (surcoMilpa && nodo) {
+          if (inventarioJugador && inventarioJugador.cuenta("frijol") <= 0) {
+            uiEdu?.mostrarToast("⚠️ ¡Sin semillas de Frijol Ayocote! Repónlas en el Dispensador [U].");
+            break;
+          }
+          const resF = triadaViva?.sembrarAsociadoEnNodo(nodoId, "frijol");
+          if (resF?.exito) {
+            inventarioJugador?.consumirPorId("frijol", 1);
+            hotbarPixel?.actualizarVisual();
+            herramientas3D?.animarSemilla();
+            audioSintetizador?.semillas(nodo.posicionMundo);
+          } else if (resF?.mensaje) {
+            uiEdu?.mostrarToast(resF.mensaje);
+          }
+        }
+        break;
+
+      case "calabaza":
+        if (surcoMilpa && nodo) {
+          if (inventarioJugador && inventarioJugador.cuenta("calabaza") <= 0) {
+            uiEdu?.mostrarToast("⚠️ ¡Sin semillas de Calabaza Criolla! Repónlas en el Dispensador [U].");
+            break;
+          }
+          const resCal = triadaViva?.sembrarAsociadoEnNodo(nodoId, "calabaza");
+          if (resCal?.exito) {
+            inventarioJugador?.consumirPorId("calabaza", 1);
+            hotbarPixel?.actualizarVisual();
+            herramientas3D?.animarSemilla();
+            audioSintetizador?.semillas(nodo.posicionMundo);
+          } else if (resCal?.mensaje) {
+            uiEdu?.mostrarToast(resCal.mensaje);
+          }
         }
         break;
 
@@ -892,11 +1104,11 @@ async function crearEscena(): Promise<Scene> {
             const varCfg = VARIEDADES_MAIZ[nodo.variedad];
             if (p.estado === "MUERTA") {
               uiEdu?.mostrarToast(
-                `💀 Estación #${nodo.id + 1} (${varCfg.nombre}): Se secó/murió por ${p.causaMuerte || "clima"}. Límpiala con Azada [1].`
+                `💀 Estación #${nodo.id + 1} (${varCfg.nombre}): Se secó/murió por ${p.causaMuerte || "clima"}. Límpiala con Azada [2].`
               );
             } else if ((p.secado ?? 0) > 0.35) {
               uiEdu?.mostrarToast(
-                `🌾 Estación #${nodo.id + 1}: Tope de altura (${p.alturaMetros.toFixed(1)}m) y secándose (${Math.round((p.secado ?? 0) * 100)}%). ¡Riega [3] o Cosecha [6]!`
+                `🌾 Estación #${nodo.id + 1}: Tope de altura (${p.alturaMetros.toFixed(1)}m) y secándose (${Math.round((p.secado ?? 0) * 100)}%). ¡Riega [7] o Cosecha [9]!`
               );
             } else if (p.limiteAlcanzado) {
               uiEdu?.mostrarToast(
@@ -946,12 +1158,10 @@ async function crearEscena(): Promise<Scene> {
               `🌽 ¡Cayeron ${cantDrops} mazorcas de ${resC.variedad.nombre}! Acércate o haz clic sobre ellas para recogerlas y llévalas a la Troje [I].`
             );
             uiEdu?.mostrarToast(
-              `${resC.mensaje} ¡Recoge las ${cantDrops} mazorcas del suelo y guárdalas en el Almacén [I]!`
+              `${resC.mensaje} ¡Recoge las ${cantDrops} mazorcas y guárdalas en la Troje [I]!`
             );
-            if (
-              carritoAgricola?.canasta &&
-              carritoAgricola.canasta.totalCosechados + (almacenMazorcas?.totalAlmacenado ?? 0) >= 4
-            ) {
+            mazorcasCosechadasEstaSesion += cantDrops;
+            if (mazorcasCosechadasEstaSesion >= 3) {
               estadoEdu.fase = "celebrar";
               estadoEdu.eloteCosechado = true;
             }
@@ -1022,7 +1232,7 @@ async function crearEscena(): Promise<Scene> {
           audioSintetizador?.semillas(nodo.posicionMundo);
           const estadoAgua =
             nodo.humedadVWC < 20
-              ? "Seco 🏜️ (necesita agua [3])"
+              ? "Seco 🏜️ (necesita agua [7])"
               : nodo.humedadVWC > 35
               ? "Muy húmedo 💧"
               : "Humedad óptima 🌿";
@@ -1059,7 +1269,7 @@ async function crearEscena(): Promise<Scene> {
           prioridad: 3,
           topico: `muerta_nodo_${n.id}_${p.causaMuerte}`,
           titulo: "💀 Don Elote advierte planta seca/muerta:",
-          texto: `El ${varCfg.nombre} en Estación #${n.id + 1} murió por ${p.causaMuerte || "estrés climático"}. Usa la Azada [1] para limpiar y volver a sembrar.`,
+          texto: `El ${varCfg.nombre} en Estación #${n.id + 1} murió por ${p.causaMuerte || "estrés climático"}. Usa la Azada [2] para limpiar y volver a sembrar.`,
           posObjetivo: n.posicionMundo
         });
         break;
@@ -1069,7 +1279,7 @@ async function crearEscena(): Promise<Scene> {
           prioridad: 2,
           topico: `secando_nodo_${n.id}`,
           titulo: "🌾 ¡Cuidado, se está secando!",
-          texto: `La Estación #${n.id + 1} (${varCfg.nombre}) se está empezando a secar (${Math.round(n.humedadVWC)}% VWC). ¡Riégala con [3] o ajusta el clima!`,
+          texto: `La Estación #${n.id + 1} (${varCfg.nombre}) se está empezando a secar (${Math.round(n.humedadVWC)}% VWC). ¡Riégala con [7] o ajusta el clima!`,
           posObjetivo: n.posicionMundo
         });
         break;
@@ -1099,7 +1309,7 @@ async function crearEscena(): Promise<Scene> {
           prioridad: 2,
           topico: `cosecha_nodo_${n.id}`,
           titulo: "🌽 ¡Mazorca lista para cosechar!",
-          texto: `La Estación #${n.id + 1} llegó a madurez (${Math.floor(dia)} días). ¡Coséchala con [6]!`,
+          texto: `La Estación #${n.id + 1} llegó a madurez (${Math.floor(dia)} días). ¡Coséchala con [9]!`,
           posObjetivo: n.posicionMundo
         });
         break;
@@ -1133,10 +1343,13 @@ async function crearEscena(): Promise<Scene> {
     onReiniciar: () => {
       estadoEdu.reiniciar();
       surcoMilpa?.reiniciarSurco();
+      surcoMilpa?.nodos.forEach((n) => faunaMilpa?.desactivarAgentesEnNodo(n.id));
+      restablecerInventarioInicial();
+      hotbarPixel?.actualizarVisual();
       malezaSistema?.actualizarThinInstances();
       triadaViva?.actualizarVisuales();
       sincronizarNodoConUI();
-      uiEdu?.mostrarToast("🌱 ¡Surco reiniciado! Listo para un nuevo ciclo agrícola.");
+      uiEdu?.mostrarToast("🌱 ¡Parcela reiniciada! Semillas e instrumentos restaurados.");
     },
     onToggleModoCientifico: () => {
       const vis = !paneles?.refs.panelConsolaMesh.isEnabled();
@@ -1157,12 +1370,10 @@ async function crearEscena(): Promise<Scene> {
       polinizacionSistema?.polinizarManual(id);
     },
     onSembrarFrijol: () => {
-      const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
-      triadaViva?.sembrarAsociadoEnNodo(id, "frijol");
+      ejecutarAccion("frijol");
     },
     onSembrarCalabaza: () => {
-      const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
-      triadaViva?.sembrarAsociadoEnNodo(id, "calabaza");
+      ejecutarAccion("calabaza");
     },
     onColocarTutor: () => {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
@@ -1201,12 +1412,205 @@ async function crearEscena(): Promise<Scene> {
     onAbrirControles: () => {
       controladorJugador?.liberarPuntero();
       modalControles?.alternar();
+    },
+    onAbrirDispensador: () => {
+      controladorJugador?.liberarPuntero();
+      if (dispensadorSemillas?.estaAbierto()) dispensadorSemillas.cerrar();
+      else dispensadorSemillas?.abrir();
+    },
+    onAbrirPausa: () => {
+      if (menuPrincipal?.estaAbierto()) return;
+      controladorJugador?.liberarPuntero();
+      if (menuPausa?.estaAbierto()) menuPausa.ocultar(true);
+      else menuPausa?.abrir(nombreMundoActivo);
     }
   });
 
-  // Inicializar Modal de Controles y Bienvenida con detección automática de Teclado vs. Oculus VR
+  // Inicializar Modal de Controles y Menús estilo Minecraft (Inicio + Pausa + Persistencia)
   modalControles = new ModalControlesBienvenida();
+  modalControles.onCerrar = () => {
+    hotbarPixel?.mostrarNombreActual();
+  };
   (window as any).modalControles = modalControles;
+
+  function serializarPartidaActual(): PartidaGuardada {
+    const diaMaximo = surcoMilpa
+      ? Math.max(...surcoMilpa.nodos.map((n) => n.diasCultivo || 0), 0)
+      : 0;
+    return {
+      id: idMundoActivo,
+      nombre: nombreMundoActivo,
+      dificultad: dificultadMundo,
+      presetClima: presetClimaMundo,
+      semillaMundo: semillaMundoStr,
+      actualizadoEn: Date.now(),
+      diaMaximo,
+      clima: { ...clima },
+      nodos: surcoMilpa ? surcoMilpa.exportarSnapshot() : [],
+      slotsJugador: inventarioJugador ? inventarioJugador.serializar() : [],
+      slotsTroje: inventarioTroje ? inventarioTroje.serializar() : [],
+      almacenPorVariedad: almacenMazorcas
+        ? { ...almacenMazorcas.almacenadoPorVariedad }
+        : { chalqueno: 0, azul: 0, rojo: 0, palomero: 0 }
+    };
+  }
+
+  function guardarPartidaActual(): boolean {
+    try {
+      guardarPartida(serializarPartidaActual());
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function setHudJuegoVisible(visible: boolean): void {
+    const uiEl = document.getElementById("ui-educativa-container");
+    const hotbarEl = document.getElementById("mc-hotbar-container");
+    const toastEl = document.getElementById("milpa-toast-container");
+    const vis = visible ? "flex" : "none";
+    if (uiEl) uiEl.style.display = vis;
+    if (hotbarEl) hotbarEl.style.display = vis;
+    if (toastEl) toastEl.style.display = visible ? "flex" : "none";
+  }
+
+  function prepararEntradaAlSurco(): void {
+    objetivoCamara = null;
+    if (camaraPrincipal) camaraPrincipal.useAutoRotationBehavior = false;
+    setHudJuegoVisible(true);
+    if (controladorJugador && controladorJugador.modo !== "fps") {
+      controladorJugador.alternarModo();
+    }
+    hotbarPixel?.seleccionarSlot(hotbarPixel.slotActivo);
+    hotbarPixel?.mostrarNombreActual();
+  }
+
+  function aplicarPartidaGuardada(p: PartidaGuardada): void {
+    idMundoActivo = p.id;
+    nombreMundoActivo = p.nombre || "Milpa Guardada";
+    dificultadMundo = p.dificultad || "normal";
+    presetClimaMundo = p.presetClima || "templado";
+    semillaMundoStr = p.semillaMundo || "CHALCO-2026";
+
+    Object.assign(clima, p.clima || climaDesdePreset(presetClimaMundo));
+    metricas = calcularMetricas(clima);
+    ambiente?.aplicarClima(clima, metricas);
+    panelClima?.actualizarValoresUI();
+
+    surcoMilpa?.nodos.forEach((n) => faunaMilpa?.desactivarAgentesEnNodo(n.id));
+    if (Array.isArray(p.nodos) && p.nodos.length > 0) {
+      surcoMilpa?.restaurarSnapshot(p.nodos, clima, metricas);
+    } else {
+      surcoMilpa?.reiniciarSurco();
+    }
+    if (Array.isArray(p.slotsJugador)) {
+      inventarioJugador?.deserializar(p.slotsJugador);
+    } else {
+      restablecerInventarioInicial();
+    }
+    if (Array.isArray(p.slotsTroje)) {
+      inventarioTroje?.deserializar(p.slotsTroje);
+    }
+
+    malezaSistema?.actualizarThinInstances();
+    triadaViva?.actualizarVisuales();
+    hotbarPixel?.actualizarVisual();
+    sincronizarNodoConUI();
+    prepararEntradaAlSurco();
+    uiEdu?.mostrarToast(`🌍 Mundo cargado: ${nombreMundoActivo} (Día ${Math.floor(p.diaMaximo || 0)})`);
+  }
+
+  menuPrincipal = new MenuPrincipalMinecraft({
+    onCrearPartida: (opts) => {
+      idMundoActivo = `mundo-${Date.now().toString(36)}`;
+      nombreMundoActivo = opts.nombre;
+      dificultadMundo = opts.dificultad;
+      presetClimaMundo = opts.presetClima;
+      semillaMundoStr = opts.semillaMundo;
+
+      Object.assign(clima, climaDesdePreset(opts.presetClima));
+      metricas = calcularMetricas(clima);
+      ambiente?.aplicarClima(clima, metricas);
+      panelClima?.actualizarValoresUI();
+
+      estadoEdu.reiniciar();
+      surcoMilpa?.reiniciarSurco();
+      surcoMilpa?.nodos.forEach((n) => faunaMilpa?.desactivarAgentesEnNodo(n.id));
+      restablecerInventarioInicial();
+      malezaSistema?.actualizarThinInstances();
+      triadaViva?.actualizarVisuales();
+      hotbarPixel?.seleccionarSlot(1);
+      sincronizarNodoConUI();
+      guardarPartidaActual();
+      prepararEntradaAlSurco();
+      uiEdu?.mostrarToast(`🌱 ¡Nueva partida creada: "${nombreMundoActivo}" (${opts.dificultad})!`);
+    },
+    onCargarPartida: (partida) => {
+      aplicarPartidaGuardada(partida);
+    },
+    onAbrirControles: () => {
+      controladorJugador?.liberarPuntero();
+      modalControles?.mostrar();
+    },
+    onAbrirAjustes: () => {
+      controladorJugador?.liberarPuntero();
+      ajustesSistema?.toggleModal();
+    }
+  });
+  (window as any).menuPrincipal = menuPrincipal;
+
+  menuPausa = new MenuPausaMinecraft({
+    onReanudar: () => {
+      hotbarPixel?.mostrarNombreActual();
+    },
+    onGuardar: () => {
+      const ok = guardarPartidaActual();
+      if (ok) uiEdu?.mostrarToast(`💾 Partida "${nombreMundoActivo}" guardada.`);
+      return ok;
+    },
+    onAbrirDispensador: () => {
+      controladorJugador?.liberarPuntero();
+      dispensadorSemillas?.abrir();
+    },
+    onAbrirControles: () => {
+      controladorJugador?.liberarPuntero();
+      modalControles?.mostrar();
+    },
+    onAbrirAjustes: () => {
+      controladorJugador?.liberarPuntero();
+      ajustesSistema?.toggleModal();
+    },
+    onReiniciar: () => {
+      estadoEdu.reiniciar();
+      surcoMilpa?.reiniciarSurco();
+      surcoMilpa?.nodos.forEach((n) => faunaMilpa?.desactivarAgentesEnNodo(n.id));
+      restablecerInventarioInicial();
+      hotbarPixel?.actualizarVisual();
+      malezaSistema?.actualizarThinInstances();
+      triadaViva?.actualizarVisuales();
+      sincronizarNodoConUI();
+      uiEdu?.mostrarToast("🌱 ¡Parcela reiniciada!");
+    },
+    onGuardarYSalir: () => {
+      guardarPartidaActual();
+      estadoEdu.reproduciendoCrecimiento = false;
+      estadoCrecimiento.timeLapseActivo = false;
+      hotbarPixel?.actualizarEstadoCrecimiento(false);
+      setHudJuegoVisible(false);
+      if (controladorJugador?.modo === "fps") {
+        controladorJugador.alternarModo();
+      }
+      enfocarCamara(-Math.PI * 0.68, 1.18, 22.5, new Vector3(3.0, 1.8, 1.5));
+      menuPrincipal?.mostrar();
+    }
+  });
+  (window as any).menuPausa = menuPausa;
+
+  // En el arranque con Menú Principal visible, iniciar en cámara orbital panorámica sin HUD ni arma en mano
+  setHudJuegoVisible(false);
+  if (controladorJugador?.modo === "fps") {
+    controladorJugador.alternarModo();
+  }
 
   // Inicializar texto de misión activa e inventario en UI
   if (misionesSistema.onActualizarUI) misionesSistema.onActualizarUI();
@@ -1223,6 +1627,9 @@ async function crearEscena(): Promise<Scene> {
     tiempoAcumulado += dt;
     timerThinSync += dt;
 
+    const menuActivo = !!menuPrincipal?.estaAbierto();
+    const juegoPausado = menuActivo || !!menuPausa?.estaAbierto();
+
     fpsTimer += dt;
     frameCount++;
     if (fpsTimer >= 0.5) {
@@ -1232,8 +1639,12 @@ async function crearEscena(): Promise<Scene> {
       frameCount = 0;
     }
 
+    if (menuActivo && camaraPrincipal && !objetivoCamara) {
+      camaraPrincipal.alpha += dt * 0.06;
+    }
+
     // 1. Crecimiento dinámico continuo si está activo
-    if (estadoEdu.reproduciendoCrecimiento && surcoMilpa) {
+    if (!juegoPausado && estadoEdu.reproduciendoCrecimiento && surcoMilpa) {
       const dtDias = dt * 3.5;
       surcoMilpa.avanzarSimulacion(dtDias, clima, metricas);
       if (timerThinSync > 0.35) {
@@ -1251,7 +1662,7 @@ async function crearEscena(): Promise<Scene> {
     }
 
     // 2. Simulación Time-Lapse científica tradicional (si las consolas 3D están activas)
-    if (estadoCrecimiento.timeLapseActivo) {
+    if (!juegoPausado && estadoCrecimiento.timeLapseActivo) {
       const dtDias = dt * estadoCrecimiento.velocidadDiasPorSeg;
       clima.hora = (clima.hora + dtDias * 24.0) % 24.0;
       paneles?.actualizarControlClima("hora", clima);
@@ -1266,7 +1677,7 @@ async function crearEscena(): Promise<Scene> {
       triadaViva?.actualizarVisuales();
       paneles?.actualizarConsola(estadoCrecimiento, clima);
       paneles?.actualizarTelemetria(metricas, estadoCrecimiento);
-    } else if (cicloSolarAuto) {
+    } else if (!juegoPausado && cicloSolarAuto) {
       clima.hora = (clima.hora + dt * 0.5) % 24.0;
       paneles?.actualizarControlClima("hora", clima);
       panelClima?.actualizarValoresUI();
@@ -1275,7 +1686,7 @@ async function crearEscena(): Promise<Scene> {
       paneles?.actualizarTelemetria(metricas, estadoCrecimiento);
     }
 
-    // 3. Animación de nubes atmosféricas y oscilación biomecánica por viento
+    // 3. Animación de nubes, molino, animales de granja y oscilación biomecánica por viento
     ambiente?.animar(dt, clima.viento);
     surcoMilpa?.animarViento(tiempoAcumulado, clima.viento);
     carritoAgricola?.actualizar(dt);
@@ -1293,23 +1704,25 @@ async function crearEscena(): Promise<Scene> {
     const posJugador = camActiva ? camActiva.position : Vector3.Zero();
 
     // 5. Actualización de sistemas VR 6DoF, Cinturón, Reloj de Muñeca y UI Poke (M1, M2, M13)
-    interaccion6DoF?.actualizar(dt);
-    if (camActiva && interaccion6DoF) {
-      const yaw = controladorJugador ? controladorJugador.camaraFPS.rotation.y : 0;
-      cinturonVR?.actualizar(dt, posJugador, yaw, interaccion6DoF.obtenerManoDominante());
-      uiPoke?.actualizar(interaccion6DoF.manoIzq, interaccion6DoF.manoDer);
-      if (surcoMilpa) {
-        const nodoSel = surcoMilpa.nodos[surcoMilpa.nodoSeleccionadoId];
-        const alerta = directorEventos?.eventoActual
-          ? `Evento: ${directorEventos.eventoActual.toUpperCase()}`
-          : "";
-        relojMuneca?.actualizar(
-          interaccion6DoF.obtenerManoNoDominante(),
-          posJugador,
-          nodoSel,
-          alerta,
-          ajustesSistema ? ajustesSistema.valores.daltonico : false
-        );
+    if (!juegoPausado) {
+      interaccion6DoF?.actualizar(dt);
+      if (camActiva && interaccion6DoF) {
+        const yaw = controladorJugador ? controladorJugador.camaraFPS.rotation.y : 0;
+        cinturonVR?.actualizar(dt, posJugador, yaw, interaccion6DoF.obtenerManoDominante());
+        uiPoke?.actualizar(interaccion6DoF.manoIzq, interaccion6DoF.manoDer);
+        if (surcoMilpa) {
+          const nodoSel = surcoMilpa.nodos[surcoMilpa.nodoSeleccionadoId];
+          const alerta = directorEventos?.eventoActual
+            ? `Evento: ${directorEventos.eventoActual.toUpperCase()}`
+            : "";
+          relojMuneca?.actualizar(
+            interaccion6DoF.obtenerManoNoDominante(),
+            posJugador,
+            nodoSel,
+            alerta,
+            ajustesSistema ? ajustesSistema.valores.daltonico : false
+          );
+        }
       }
     }
 
@@ -1317,13 +1730,15 @@ async function crearEscena(): Promise<Scene> {
     if (interaccion6DoF && controladorJugador) {
       interaccion6DoF.modoFPSActivo = controladorJugador.modo === "fps";
     }
-    almacenMazorcas?.actualizar(dt, posJugador);
-    sistemaDrops?.actualizar(dt);
-    faunaMilpa?.actualizar(dt, interaccion6DoF?.manoIzq, interaccion6DoF?.manoDer);
-    directorEventos?.actualizar(dt);
-    surcoMilpa?.actualizarContornos(dt, posJugador);
-    audioSintetizador?.actualizarListener(posJugador);
-    audioSintetizador?.actualizarPaisajeSonoro(dt, clima.hora, clima.lluvia);
+    if (!juegoPausado) {
+      almacenMazorcas?.actualizar(dt, posJugador);
+      sistemaDrops?.actualizar(dt);
+      faunaMilpa?.actualizar(dt, interaccion6DoF?.manoIzq, interaccion6DoF?.manoDer);
+      directorEventos?.actualizar(dt);
+      surcoMilpa?.actualizarContornos(dt, posJugador);
+      audioSintetizador?.actualizarListener(posJugador);
+      audioSintetizador?.actualizarPaisajeSonoro(dt, clima.hora, clima.lluvia);
+    }
     if (enXR) {
       ajustesSistema?.verificarAlturaCabezaXR(posJugador.y);
     }
@@ -1332,7 +1747,8 @@ async function crearEscena(): Promise<Scene> {
     // 7. Espantapájaros guía, mesa de clima y jugador en primera persona
     espantapajaros?.animar(tiempoAcumulado, clima.viento, posJugador);
     mesaClimaPrejuego?.animar(tiempoAcumulado);
-    if (!enXR) {
+    dispensadorSemillas?.animar(tiempoAcumulado);
+    if (!enXR && !juegoPausado) {
       controladorJugador?.actualizar(dt);
     }
     herramientas3D?.animarIdle(tiempoAcumulado);
@@ -1354,13 +1770,13 @@ async function crearEscena(): Promise<Scene> {
     }
   });
 
-  // M. Estado inicial
+  // M. Estado inicial (sincronizar Hotbar -> Viewmodel -> EstadoEducativo en Azada [2])
   ambiente.aplicarClima(clima, metricas);
   ambiente.actualizarHumedadVisual(estadoEdu.humedadSuelo);
   irADia(estadoCrecimiento, 0, clima);
   maiz.root.setEnabled(false);
 
-  function seleccionarHerramientaHotbar(h: HerramientaTipo, nombre: string): void {
+  function seleccionarHerramientaHotbar(h: HerramientaTipo, _nombre: string): void {
     estadoEdu.herramientaSeleccionada = h;
     if (interaccion6DoF) interaccion6DoF.herramientaActiva = h;
     controladorJugador?.equipar(h);
@@ -1370,21 +1786,59 @@ async function crearEscena(): Promise<Scene> {
     // En modo Orbital o para el botón de Sol (+15 días), también ejecuta la acción directamente
     if (controladorJugador?.modo === "orbital" || h === "sol") {
       ejecutarAccion(h);
-    } else {
-      uiEdu?.mostrarToast(`🧰 Mano equipada: ${nombre} — Apunta y haz [Clic Izquierdo] para usar`);
     }
   }
 
-  // N. Atajos de teclado completos estilo Minecraft (Hotbar 0-6 + Almacén [I] + Ecosistema v4.0)
+  hotbarPixel?.seleccionarSlot(1);
+
+  // N. Atajos de teclado completos estilo Minecraft (Hotbar 1-9 + Almacén [I] + Ecosistema v4.0)
   window.addEventListener("keydown", async (ev) => {
     const tag = (ev.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
 
     if (ev.code === "Escape") {
+      if (modalControles?.estaAbierto()) {
+        modalControles.ocultar();
+        return;
+      }
       if (modalCofreTroje?.estaAbierto) {
         modalCofreTroje.cerrar();
         return;
       }
+      const modalsPorId = [
+        "dispensadorSemillasModal",
+        "fogonCocinaModal",
+        "bancoSemillasModal",
+        "codiceMaizModal",
+        "almacenMazorcasModal",
+        "modalAjustesVR"
+      ];
+      for (const id of modalsPorId) {
+        const mEl = document.getElementById(id);
+        if (mEl && getComputedStyle(mEl).display !== "none") {
+          mEl.style.display = "none";
+          return;
+        }
+      }
+      const climaCard = document.querySelector(".panel-clima-card.visible");
+      if (climaCard) {
+        panelClima?.toggle();
+        return;
+      }
+      if (menuPrincipal?.estaAbierto()) {
+        return;
+      }
+      if (menuPausa?.estaAbierto()) {
+        menuPausa.ocultar(true);
+      } else {
+        controladorJugador?.liberarPuntero();
+        menuPausa?.abrir(nombreMundoActivo);
+      }
+      return;
+    }
+
+    if (menuPrincipal?.estaAbierto() || menuPausa?.estaAbierto()) {
+      return;
     }
 
     if (ev.code === "Space") {
@@ -1402,9 +1856,15 @@ async function crearEscena(): Promise<Scene> {
       hotbarPixel?.seleccionarSlot(idx);
     } else if (ev.key === "0" || ev.key === "`") {
       hotbarPixel?.seleccionarSlot(0);
-    } else if (ev.key === "i" || ev.key === "I" || ev.key === "u" || ev.key === "U") {
+    } else if (ev.key === "i" || ev.key === "I") {
       controladorJugador?.liberarPuntero();
       modalCofreTroje?.alternar();
+    } else if (ev.key === "u" || ev.key === "U") {
+      controladorJugador?.liberarPuntero();
+      if (dispensadorSemillas?.estaAbierto()) dispensadorSemillas.cerrar();
+      else dispensadorSemillas?.abrir();
+    } else if (ev.key === "y" || ev.key === "Y") {
+      ejecutarAccion("sol");
     } else if (ev.key === "x" || ev.key === "X") {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
       malezaSistema?.deshierbarNodo(id, 0.6);
@@ -1413,11 +1873,9 @@ async function crearEscena(): Promise<Scene> {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
       polinizacionSistema?.polinizarManual(id);
     } else if (ev.key === "b" || ev.key === "B") {
-      const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
-      triadaViva?.sembrarAsociadoEnNodo(id, "frijol");
+      ejecutarAccion("frijol");
     } else if (ev.key === "n" || ev.key === "N") {
-      const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
-      triadaViva?.sembrarAsociadoEnNodo(id, "calabaza");
+      ejecutarAccion("calabaza");
     } else if (ev.key === "t" || ev.key === "T") {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
       const res = surcoMilpa?.colocarTutor(id);
@@ -1444,6 +1902,9 @@ async function crearEscena(): Promise<Scene> {
       } else if (controladorJugador?.tipoObjetivoEnfocado === "almacen" || controladorJugador?.tipoObjetivoEnfocado === "canasta") {
         controladorJugador.liberarPuntero();
         modalCofreTroje?.alternar();
+      } else if (controladorJugador?.tipoObjetivoEnfocado === "dispensador") {
+        controladorJugador.liberarPuntero();
+        dispensadorSemillas?.abrir();
       } else if (controladorJugador?.tipoObjetivoEnfocado === "fogon") {
         fogonCocina?.avanzarPasoInteractivo();
       } else if (controladorJugador?.tipoObjetivoEnfocado === "banco") {

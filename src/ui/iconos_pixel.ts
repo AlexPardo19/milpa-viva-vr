@@ -20,7 +20,15 @@ const PALETA: Record<string, string> = {
   P: "#fed7aa", // Piel campesina
   S: "#64748b", // Metal / piedra
   s: "#cbd5e1", // Metal brillo
-  V: "#7c3aed", // Frijol negro/morado
+  V: "#581c87", // Frijol ayocote oscuro
+  v: "#a855f7", // Frijol brillo morado
+  A: "#312e81", // Azul índigo oscuro
+  a: "#6366f1", // Azul índigo brillante
+  r: "#7f1d1d", // Rojo granate sombra
+  D: "#f59e0b", // Ámbar dorado
+  C: "#fef3c7", // Crema brillo
+  T: "#92400e", // Costal yute sombra
+  t: "#d6b888", // Costal lino claro
 };
 
 export const ICONOS_PIXEL: Record<string, string[]> = {
@@ -123,32 +131,88 @@ export const ICONOS_PIXEL: Record<string, string[]> = {
     "............"
   ],
   frijol: [
-    "....KKKK....",
-    "...KVVvVK...",
-    "..KVVvvVVK..",
-    "..KVvvVVVK..",
-    "..KVVvvVVK..",
-    "...KVVVVK...",
-    "....KKKK....",
-    "............",
-    "............",
-    "............",
-    "............",
-    "............"
+    "...KK..KK...",
+    "..KVvKKvVK..",
+    "..KVVKKVVK..",
+    "...KKKKKK...",
+    "..KTTTTTTK..",
+    ".KtvvvvvvtK.",
+    ".KtVVVVVVtK.",
+    ".KttttttttK.",
+    ".KtVVttVVtK.",
+    ".KttttttttK.",
+    "..KTTTTTTK..",
+    "...KKKKKK..."
   ],
   calabaza: [
-    "....KGGK....",
-    "...KOOOOK...",
-    "..KOOyOOOK..",
-    ".KOOyOOyOOK.",
-    ".KOOOOOOOOK.",
-    "..KOOOOOOK..",
-    "...KOOOOK...",
-    "....KKKK....",
-    "............",
-    "............",
-    "............",
-    "............"
+    "...KK..KK...",
+    "..KCyKKyCK..",
+    "..KOOCCOOK..",
+    "...KKKKKK...",
+    "..KTTTTTTK..",
+    ".KtOOOOOOtK.",
+    ".KtDDDDDDtK.",
+    ".KttttttttK.",
+    ".KtOOttOOtK.",
+    ".KttttttttK.",
+    "..KTTTTTTK..",
+    "...KKKKKK..."
+  ],
+  grano_chalqueno: [
+    "...KK..KK...",
+    "..KYyKKyYK..",
+    "..KYYKKYYK..",
+    "...KKKKKK...",
+    "..KTTTTTTK..",
+    ".KtYYYYYYtK.",
+    ".KtOOOOOOtK.",
+    ".KttttttttK.",
+    ".KtYYttYYtK.",
+    ".KttttttttK.",
+    "..KTTTTTTK..",
+    "...KKKKKK..."
+  ],
+  grano_azul: [
+    "...KK..KK...",
+    "..KaAKKAaK..",
+    "..KAAKKAAK..",
+    "...KKKKKK...",
+    "..KTTTTTTK..",
+    ".KtaaaaaatK.",
+    ".KtAAAAAAtK.",
+    ".KttttttttK.",
+    ".KtAAttAAtK.",
+    ".KttttttttK.",
+    "..KTTTTTTK..",
+    "...KKKKKK..."
+  ],
+  grano_rojo: [
+    "...KK..KK...",
+    "..KRrKKrRK..",
+    "..KRRKKRRK..",
+    "...KKKKKK...",
+    "..KTTTTTTK..",
+    ".KtRRRRRRtK.",
+    ".KtrrrrrrtK.",
+    ".KttttttttK.",
+    ".KtRRttRRtK.",
+    ".KttttttttK.",
+    "..KTTTTTTK..",
+    "...KKKKKK..."
+  ],
+  grano_palomero: [
+    "...KK..KK...",
+    "..KCDKKDCK..",
+    "..KCCKKCCK..",
+    "...KKKKKK...",
+    "..KTTTTTTK..",
+    ".KtDDDDDDtK.",
+    ".KtOOOOOOtK.",
+    ".KttttttttK.",
+    ".KtCCttCCtK.",
+    ".KttttttttK.",
+    "..KTTTTTTK..",
+    "...KKKKKK..."
   ]
 };
 

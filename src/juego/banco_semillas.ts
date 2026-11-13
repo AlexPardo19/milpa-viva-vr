@@ -13,6 +13,7 @@ import { CanastaRecoleccion3D } from '../vr/canasta_cosecha';
 import { AudioSintetizador } from '../audio_sintetizador';
 import { BusEventos } from './bus_eventos';
 import { clamp, crearRng } from './util';
+import { crearTexMaderaPixel } from '../ui/texturas_pixel_3d';
 
 export interface LoteSemilla {
     id: string;
@@ -219,8 +220,9 @@ export class BancoSemillas {
         const colorContorno = Color3.FromHexString('#25330f');
 
         const matMadera = new StandardMaterial('matMesaSemillas', this.scene);
-        matMadera.diffuseColor = Color3.FromHexString('#6d4c41');
-        matMadera.emissiveColor = Color3.FromHexString('#6d4c41').scale(0.32);
+        matMadera.diffuseTexture = crearTexMaderaPixel(this.scene, false, 2, 1);
+        matMadera.diffuseColor = Color3.FromHexString('#d7b998');
+        matMadera.emissiveColor = Color3.FromHexString('#4a3222').scale(0.32);
         matMadera.specularColor = Color3.Black();
 
         const mesa = MeshBuilder.CreateBox(
@@ -230,9 +232,6 @@ export class BancoSemillas {
         );
         mesa.position.y = 0.39;
         mesa.material = matMadera;
-        mesa.renderOutline = true;
-        mesa.outlineColor = colorContorno;
-        mesa.outlineWidth = 0.02;
         mesa.parent = this.raiz;
         mesa.computeWorldMatrix(true);
         mesa.freezeWorldMatrix();
@@ -273,11 +272,11 @@ export class BancoSemillas {
         modal.id = 'bancoSemillasModal';
         modal.style.cssText = `
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(20, 32, 18, 0.96); color: #ecfdf5;
-            border: 2px solid #10b981; border-radius: 16px;
+            background: rgba(16, 26, 16, 0.96); color: #ecfdf5;
+            border: 4px solid; border-color: #34d399 #064e3b #064e3b #34d399; border-radius: 0;
             padding: 18px 22px; width: min(640px, 94vw); max-height: 86vh; overflow-y: auto; z-index: 2500;
-            font-family: system-ui, sans-serif; display: none;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.85);
+            font-family: var(--fuente-px); display: none;
+            box-shadow: 0 0 0 4px #000000;
         `;
         document.body.appendChild(modal);
         this.modalEl = modal;
@@ -310,7 +309,7 @@ export class BancoSemillas {
                     <div style="display:flex;justify-content:space-between;">
                         <span>${etiqueta}</span><b>×${valor.toFixed(2)}</b>
                     </div>
-                    <div style="height:6px;background:rgba(255,255,255,0.12);border-radius:4px;overflow:hidden;">
+                    <div style="height:6px;background:rgba(255,255,255,0.12);border-radius:0;overflow:hidden;">
                         <div style="width:${clamp(pct, 5, 100)}%;height:100%;background:#10b981;"></div>
                     </div>
                 </div>
@@ -321,7 +320,7 @@ export class BancoSemillas {
             .map((k) => {
                 const v = VARIEDADES_MAIZ[k];
                 return `
-                    <div style="background:rgba(0,0,0,0.28);border-left:4px solid ${v.colorHex};padding:8px 10px;border-radius:8px;margin-bottom:6px;font-size:0.78rem;line-height:1.35;">
+                    <div style="background:rgba(0,0,0,0.28);border:2px solid #14532d;border-left:5px solid ${v.colorHex};padding:8px 10px;border-radius:0;margin-bottom:6px;font-size:0.78rem;line-height:1.35;">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <strong style="color:#fcd34d;font-size:0.84rem;">🌽 ${v.nombre} — <em>${v.especieBotanica}</em></strong>
                             <span style="color:#94a3b8;font-size:0.72rem;">Techo: ${v.alturaMetrosMax.toFixed(1)} m</span>
@@ -334,19 +333,19 @@ export class BancoSemillas {
             .join('');
 
         this.modalEl.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:2px solid #064e3b;padding-bottom:6px;">
                 <h3 style="margin:0;color:#34d399;font-size:1.1rem;">🧬 Banco Campesino de Semillas y Ficha de Especies</h3>
-                <button id="btnCerrarBanco" style="background:none;border:none;color:#a7f3d0;font-size:1.3rem;cursor:pointer;">✕</button>
+                <button id="btnCerrarBanco" style="background:#dc2626;border:2px solid;border-color:#fca5a5 #7f1d1d #7f1d1d #fca5a5;border-radius:0;color:#fff;font-size:1rem;cursor:pointer;padding:2px 8px;font-weight:700;">✕</button>
             </div>
             <div style="margin-bottom:10px;">
                 <div style="font-size:0.82rem;color:#6ee7b7;font-weight:700;margin-bottom:5px;">🌿 Especies Botánicas y Condiciones Agroclimáticas:</div>
                 ${fichasEspecies}
             </div>
             <label style="display:block;font-size:0.82rem;color:#6ee7b7;margin-bottom:4px;">Lote Genético Activo para Siembra:</label>
-            <select id="selLoteSemilla" style="width:100%;padding:7px;border-radius:8px;background:#112214;color:#ecfdf5;border:1px solid #059669;margin-bottom:10px;">
+            <select id="selLoteSemilla" style="width:100%;padding:7px;border-radius:0;background:#112214;color:#ecfdf5;border:2px solid #059669;margin-bottom:10px;font-family:var(--fuente-px);">
                 ${opcionesLotes}
             </select>
-            <div style="background:rgba(255,255,255,0.06);padding:8px 12px;border-radius:10px;margin-bottom:10px;">
+            <div style="background:rgba(255,255,255,0.06);border:2px solid #064e3b;padding:8px 12px;border-radius:0;margin-bottom:10px;">
                 ${barra('🌱 Vigor Vegetativo (rVigor)', r.rVigor)}
                 ${barra('💧 Tolerancia a Sequía (rSequia)', r.rSequia)}
                 ${barra('❄️ Tolerancia a Helada (rFrio)', r.rFrio)}
@@ -357,12 +356,12 @@ export class BancoSemillas {
                 Selecciona el rasgo a mejorar para la siguiente generación (Selección Masal):
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
-                <button data-foco="rVigor" class="btnFocoGen" style="flex:1;padding:6px;border-radius:8px;border:none;background:#059669;color:#fff;cursor:pointer;font-size:0.78rem;">+Vigor</button>
-                <button data-foco="rSequia" class="btnFocoGen" style="flex:1;padding:6px;border-radius:8px;border:none;background:#0284c7;color:#fff;cursor:pointer;font-size:0.78rem;">+Sequía</button>
-                <button data-foco="rFrio" class="btnFocoGen" style="flex:1;padding:6px;border-radius:8px;border:none;background:#4f46e5;color:#fff;cursor:pointer;font-size:0.78rem;">+Frío</button>
-                <button data-foco="rTamano" class="btnFocoGen" style="flex:1;padding:6px;border-radius:8px;border:none;background:#d97706;color:#fff;cursor:pointer;font-size:0.78rem;">+Mazorca</button>
+                <button data-foco="rVigor" class="btnFocoGen" style="flex:1;padding:6px;border-radius:0;border:2px solid;border-color:#6ee7b7 #064e3b #064e3b #6ee7b7;background:#059669;color:#fff;cursor:pointer;font-size:0.78rem;font-family:var(--fuente-px);">+Vigor</button>
+                <button data-foco="rSequia" class="btnFocoGen" style="flex:1;padding:6px;border-radius:0;border:2px solid;border-color:#7dd3fc #075985 #075985 #7dd3fc;background:#0284c7;color:#fff;cursor:pointer;font-size:0.78rem;font-family:var(--fuente-px);">+Sequía</button>
+                <button data-foco="rFrio" class="btnFocoGen" style="flex:1;padding:6px;border-radius:0;border:2px solid;border-color:#a5b4fc #312e81 #312e81 #a5b4fc;background:#4f46e5;color:#fff;cursor:pointer;font-size:0.78rem;font-family:var(--fuente-px);">+Frío</button>
+                <button data-foco="rTamano" class="btnFocoGen" style="flex:1;padding:6px;border-radius:0;border:2px solid;border-color:#fcd34d #78350f #78350f #fcd34d;background:#d97706;color:#fff;cursor:pointer;font-size:0.78rem;font-family:var(--fuente-px);">+Mazorca</button>
             </div>
-            <button id="btnTruequeFeria" style="width:100%;padding:8px;border-radius:9px;border:1px solid #34d399;background:rgba(16,185,129,0.18);color:#ecfdf5;font-weight:600;cursor:pointer;font-size:0.82rem;">
+            <button id="btnTruequeFeria" style="width:100%;padding:8px;border-radius:0;border:2px solid #34d399;background:rgba(16,185,129,0.22);color:#ecfdf5;font-weight:700;cursor:pointer;font-size:0.82rem;font-family:var(--fuente-px);">
                 🤝 Feria de la Semilla: Realizar Trueque Campesino
             </button>
         `;

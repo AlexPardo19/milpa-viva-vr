@@ -50,6 +50,9 @@ export class FaunaMilpa {
 
     private timerSpawn = 0;
     private timerSonido = 0;
+    private tiempoTotal = 0;
+    private tiempoUltimaLarva = -30;
+    private cooldownLarvaNodo = new Map<number, number>();
 
     public onMensajeToast?: (msg: string) => void;
 
@@ -96,134 +99,207 @@ export class FaunaMilpa {
         const mat = new StandardMaterial(`matFauna_${id}`, this.scene);
         mat.specularColor = Color3.Black();
 
+        const aplicarContorno = (m: any) => {
+            m.renderOutline = true;
+            m.outlineWidth = 0.008;
+            m.outlineColor = Color3.FromHexString('#1a240a');
+        };
+
         if (tipo === 'larva') {
-            mat.diffuseColor = Color3.FromHexString('#7cb342');
-            mat.emissiveColor = Color3.FromHexString('#558b2f').scale(0.22);
-            for (let s = 0; s < 4; s++) {
-                const seg = MeshBuilder.CreateSphere(
+            // Oruga cogollera voxel estilo pixel-art con segmentos alternados, banda dorsal y mandíbulas
+            mat.diffuseColor = Color3.FromHexString('#65a30d');
+            mat.emissiveColor = Color3.FromHexString('#365314').scale(0.28);
+
+            const matClaro = new StandardMaterial(`matLarvaClaro_${id}`, this.scene);
+            matClaro.diffuseColor = Color3.FromHexString('#84cc16');
+            matClaro.emissiveColor = Color3.FromHexString('#4d7c0f').scale(0.28);
+            matClaro.specularColor = Color3.Black();
+
+            const matBanda = new StandardMaterial(`matLarvaBanda_${id}`, this.scene);
+            matBanda.diffuseColor = Color3.FromHexString('#bef264');
+            matBanda.emissiveColor = Color3.FromHexString('#84cc16').scale(0.3);
+            matBanda.specularColor = Color3.Black();
+
+            for (let s = 0; s < 5; s++) {
+                const sizeSeg = 0.052 - s * 0.004;
+                const seg = MeshBuilder.CreateBox(
                     `larvaSeg_${id}_${s}`,
-                    { diameter: 0.048 - s * 0.005, segments: 8 },
+                    { width: sizeSeg * 1.12, height: sizeSeg, depth: sizeSeg },
                     this.scene
                 );
-                seg.position.set(s * 0.032 - 0.048, Math.sin(s * 1.1) * 0.008, 0);
-                seg.material = mat;
+                seg.position.set(s * 0.044 - 0.04, Math.sin(s * 1.1) * 0.009, 0);
+                seg.material = s % 2 === 0 ? mat : matClaro;
                 seg.parent = raiz;
+                aplicarContorno(seg);
                 this.registrarClickAgente(seg, id);
+
+                const banda = MeshBuilder.CreateBox(
+                    `larvaBanda_${id}_${s}`,
+                    { width: sizeSeg * 0.72, height: 0.012, depth: sizeSeg * 0.55 },
+                    this.scene
+                );
+                banda.position.y = sizeSeg * 0.52;
+                banda.material = matBanda;
+                banda.parent = seg;
             }
+
             const matCab = new StandardMaterial(`matLarvaCab_${id}`, this.scene);
-            matCab.diffuseColor = Color3.FromHexString('#3e2723');
-            matCab.emissiveColor = Color3.FromHexString('#3e2723').scale(0.18);
-            const cab = MeshBuilder.CreateSphere(
+            matCab.diffuseColor = Color3.FromHexString('#451a03');
+            matCab.emissiveColor = Color3.FromHexString('#451a03').scale(0.2);
+            matCab.specularColor = Color3.Black();
+
+            const cab = MeshBuilder.CreateBox(
                 `larvaCab_${id}`,
-                { diameter: 0.042, segments: 8 },
+                { width: 0.054, height: 0.054, depth: 0.054 },
                 this.scene
             );
-            cab.position.set(-0.075, 0, 0);
+            cab.position.set(-0.088, 0.006, 0);
             cab.material = matCab;
             cab.parent = raiz;
+            aplicarContorno(cab);
             this.registrarClickAgente(cab, id);
+
+            const matMand = new StandardMaterial(`matLarvaMand_${id}`, this.scene);
+            matMand.diffuseColor = Color3.FromHexString('#fef08a');
+            matMand.emissiveColor = Color3.FromHexString('#ca8a04').scale(0.35);
+            matMand.specularColor = Color3.Black();
+            const matOjo = new StandardMaterial(`matLarvaOjo_${id}`, this.scene);
+            matOjo.diffuseColor = Color3.FromHexString('#ef4444');
+            matOjo.emissiveColor = Color3.FromHexString('#ef4444').scale(0.5);
+            matOjo.specularColor = Color3.Black();
+            [-1, 1].forEach((lado, idx) => {
+                const mand = MeshBuilder.CreateBox(
+                    `larvaMand_${id}_${idx}`,
+                    { width: 0.02, height: 0.014, depth: 0.014 },
+                    this.scene
+                );
+                mand.position.set(-0.032, -0.014, lado * 0.015);
+                mand.material = matMand;
+                mand.parent = cab;
+
+                const ojo = MeshBuilder.CreateBox(
+                    `larvaOjo_${id}_${idx}`,
+                    { width: 0.012, height: 0.012, depth: 0.012 },
+                    this.scene
+                );
+                ojo.position.set(-0.024, 0.01, lado * 0.02);
+                ojo.material = matOjo;
+                ojo.parent = cab;
+            });
         } else if (tipo === 'ave') {
-            mat.diffuseColor = Color3.FromHexString('#263238');
-            mat.emissiveColor = Color3.FromHexString('#263238').scale(0.22);
-            const cuerpo = MeshBuilder.CreateSphere(
+            mat.diffuseColor = Color3.FromHexString('#1e293b');
+            mat.emissiveColor = Color3.FromHexString('#1e293b').scale(0.24);
+            const cuerpo = MeshBuilder.CreateBox(
                 `aveCuerpo_${id}`,
-                { diameter: 0.16, segments: 8 },
+                { width: 0.13, height: 0.11, depth: 0.21 },
                 this.scene
             );
-            cuerpo.scaling.set(0.85, 0.72, 1.45);
             cuerpo.material = mat;
             cuerpo.parent = raiz;
+            aplicarContorno(cuerpo);
 
-            // Alas extendidas
             for (const lado of [-1, 1]) {
                 const ala = MeshBuilder.CreateBox(
                     `aveAla_${id}_${lado}`,
-                    { width: 0.18, height: 0.015, depth: 0.11 },
+                    { width: 0.18, height: 0.02, depth: 0.12 },
                     this.scene
                 );
-                ala.position.set(lado * 0.11, 0.02, 0);
+                ala.position.set(lado * 0.12, 0.03, -0.01);
                 ala.rotation.z = lado * 0.18;
                 ala.material = mat;
                 ala.parent = raiz;
+                aplicarContorno(ala);
             }
 
             const matPico = new StandardMaterial(`matPico_${id}`, this.scene);
-            matPico.diffuseColor = Color3.FromHexString('#ffb300');
-            matPico.emissiveColor = Color3.FromHexString('#ffb300').scale(0.25);
-            const pico = MeshBuilder.CreateCylinder(
+            matPico.diffuseColor = Color3.FromHexString('#f59e0b');
+            matPico.emissiveColor = Color3.FromHexString('#d97706').scale(0.3);
+            matPico.specularColor = Color3.Black();
+            const pico = MeshBuilder.CreateBox(
                 `avePico_${id}`,
-                { height: 0.075, diameterTop: 0, diameterBottom: 0.042, tessellation: 6 },
+                { width: 0.038, height: 0.032, depth: 0.075 },
                 this.scene
             );
-            pico.rotation.x = Math.PI / 2;
-            pico.position.set(0, 0.01, 0.14);
+            pico.position.set(0, 0.015, 0.135);
             pico.material = matPico;
             pico.parent = raiz;
+            aplicarContorno(pico);
             this.registrarClickAgente(cuerpo, id);
         } else if (tipo === 'abeja') {
-            mat.diffuseColor = Color3.FromHexString('#f59e0b');
-            mat.emissiveColor = Color3.FromHexString('#d97706').scale(0.25);
-            const cuerpo = MeshBuilder.CreateSphere(
+            mat.diffuseColor = Color3.FromHexString('#fbbf24');
+            mat.emissiveColor = Color3.FromHexString('#d97706').scale(0.3);
+            const cuerpo = MeshBuilder.CreateBox(
                 `abejaCuerpo_${id}`,
-                { diameter: 0.062, segments: 8 },
+                { width: 0.052, height: 0.052, depth: 0.084 },
                 this.scene
             );
-            cuerpo.scaling.set(0.82, 0.82, 1.32);
             cuerpo.material = mat;
             cuerpo.parent = raiz;
+            aplicarContorno(cuerpo);
 
-            // Franja oscura dorsal y alas translúcidas
             const matFranja = new StandardMaterial(`matAbejaFranja_${id}`, this.scene);
-            matFranja.diffuseColor = Color3.FromHexString('#271c19');
-            const franja = MeshBuilder.CreateCylinder(
+            matFranja.diffuseColor = Color3.FromHexString('#1f1612');
+            matFranja.specularColor = Color3.Black();
+            const franja = MeshBuilder.CreateBox(
                 `abejaFranja_${id}`,
-                { height: 0.025, diameter: 0.054, tessellation: 8 },
+                { width: 0.056, height: 0.056, depth: 0.028 },
                 this.scene
             );
-            franja.rotation.x = Math.PI / 2;
             franja.material = matFranja;
             franja.parent = raiz;
 
             const matAla = new StandardMaterial(`matAbejaAla_${id}`, this.scene);
             matAla.diffuseColor = Color3.FromHexString('#e0f2fe');
-            matAla.emissiveColor = Color3.FromHexString('#bae6fd').scale(0.3);
-            matAla.alpha = 0.65;
+            matAla.emissiveColor = Color3.FromHexString('#bae6fd').scale(0.35);
+            matAla.alpha = 0.72;
+            matAla.specularColor = Color3.Black();
             for (const lado of [-1, 1]) {
-                const ala = MeshBuilder.CreateDisc(
+                const ala = MeshBuilder.CreateBox(
                     `abejaAla_${id}_${lado}`,
-                    { radius: 0.032, tessellation: 8 },
+                    { width: 0.055, height: 0.008, depth: 0.036 },
                     this.scene
                 );
-                ala.position.set(lado * 0.028, 0.026, 0);
-                ala.rotation.x = Math.PI / 2.4;
-                ala.rotation.y = lado * 0.35;
+                ala.position.set(lado * 0.036, 0.032, 0);
+                ala.rotation.z = lado * 0.25;
                 ala.material = matAla;
                 ala.parent = raiz;
             }
             this.registrarClickAgente(cuerpo, id);
         } else {
-            // Catarina roja con cabeza negra y puntos dorsales
+            // Catarina voxel roja con cabeza negra y puntos dorsales
             mat.diffuseColor = Color3.FromHexString('#dc2626');
-            mat.emissiveColor = Color3.FromHexString('#b91c1c').scale(0.22);
-            const caparazon = MeshBuilder.CreateSphere(
+            mat.emissiveColor = Color3.FromHexString('#b91c1c').scale(0.28);
+            const caparazon = MeshBuilder.CreateBox(
                 `catarina_${id}`,
-                { diameter: 0.058, segments: 8 },
+                { width: 0.058, height: 0.038, depth: 0.068 },
                 this.scene
             );
-            caparazon.scaling.set(1, 0.62, 1.12);
             caparazon.material = mat;
             caparazon.parent = raiz;
+            aplicarContorno(caparazon);
 
             const matNegro = new StandardMaterial(`matCatNegro_${id}`, this.scene);
             matNegro.diffuseColor = Color3.FromHexString('#171717');
-            const cab = MeshBuilder.CreateSphere(
+            matNegro.specularColor = Color3.Black();
+            const cab = MeshBuilder.CreateBox(
                 `catCab_${id}`,
-                { diameter: 0.028, segments: 6 },
+                { width: 0.032, height: 0.026, depth: 0.026 },
                 this.scene
             );
-            cab.position.set(0, -0.002, 0.03);
+            cab.position.set(0, -0.003, 0.042);
             cab.material = matNegro;
             cab.parent = raiz;
+
+            [-0.015, 0.015].forEach((px, pIdx) => {
+                const punto = MeshBuilder.CreateBox(
+                    `catPunto_${id}_${pIdx}`,
+                    { size: 0.014 },
+                    this.scene
+                );
+                punto.position.set(px, 0.021, -0.01);
+                punto.material = matNegro;
+                punto.parent = raiz;
+            });
             this.registrarClickAgente(caparazon, id);
         }
 
@@ -344,11 +420,12 @@ export class FaunaMilpa {
     }
 
     public actualizar(dt: number, manoIzq?: ManoVR | null, manoDer?: ManoVR | null): void {
+        this.tiempoTotal += dt;
         this.timerSpawn += dt;
         this.timerSonido += dt;
 
-        // Intentar activar un agente cada 6 segundos si hay espacio en el pool
-        if (this.timerSpawn > 6.0) {
+        // Intentar activar fauna cada 12 segundos (orugas tienen cooldown mucho más largo)
+        if (this.timerSpawn > 12.0) {
             this.timerSpawn = 0;
             if (this.contarActivos() < this.MAX_ACTIVOS) {
                 this.intentarSpawn();
@@ -376,39 +453,61 @@ export class FaunaMilpa {
             ag.tiempoEstado += dt;
 
             if (ag.estado === 'LLEGANDO') {
-                ag.progreso = clamp01(ag.progreso + dt * 0.65);
-                Vector3.LerpToRef(ag.origen, ag.destino, ag.progreso, ag.posicion);
-                ag.posicion.y += Math.sin(ag.progreso * Math.PI) * 0.4;
-                ag.raiz.position.copyFrom(ag.posicion);
-                if (ag.progreso >= 1) {
-                    ag.estado = 'ACTUANDO';
-                    ag.tiempoEstado = 0;
+                if (ag.tipo === 'larva') {
+                    // Emerge suavemente desde debajo del montículo de tierra hacia la base del tallo
+                    ag.progreso = clamp01(ag.progreso + dt * 0.42);
+                    Vector3.LerpToRef(ag.origen, ag.destino, ag.progreso, ag.posicion);
+                    ag.raiz.position.copyFrom(ag.posicion);
+                    ag.raiz.rotation.z = (1 - ag.progreso) * 0.65;
+                    ag.raiz.rotation.y = Math.sin(ag.progreso * 8) * 0.18;
+                    if (ag.progreso >= 1) {
+                        ag.estado = 'ACTUANDO';
+                        ag.tiempoEstado = 0;
+                        ag.raiz.rotation.z = 0;
+                    }
+                } else {
+                    ag.progreso = clamp01(ag.progreso + dt * 0.65);
+                    Vector3.LerpToRef(ag.origen, ag.destino, ag.progreso, ag.posicion);
+                    ag.posicion.y += Math.sin(ag.progreso * Math.PI) * 0.4;
+                    ag.raiz.position.copyFrom(ag.posicion);
+                    if (ag.progreso >= 1) {
+                        ag.estado = 'ACTUANDO';
+                        ag.tiempoEstado = 0;
+                    }
                 }
             } else if (ag.estado === 'ACTUANDO') {
-                // Movimiento orbital suave pegado al tallo/follaje de la planta viva
-                const ang = ag.tiempoEstado * (ag.tipo === 'abeja' ? 3.0 : 1.4) + ag.id;
-                const radio = ag.tipo === 'larva' ? 0.065 : ag.tipo === 'catarina' ? 0.14 : 0.24;
+                // Movimiento orbital o trepado sobre el tallo/follaje de la planta viva
+                const ang = ag.tiempoEstado * (ag.tipo === 'abeja' ? 3.0 : ag.tipo === 'larva' ? 1.8 : 1.4) + ag.id;
+                const radio = ag.tipo === 'larva' ? 0.055 : ag.tipo === 'catarina' ? 0.14 : 0.24;
                 const altPlanta = Math.max(0.45, Math.min(1.4, nodo.plantaInterna.alturaMetros * 0.65));
-                const altBase = ag.tipo === 'larva' ? altPlanta * 0.55 : ag.tipo === 'catarina' ? altPlanta * 0.65 : altPlanta * 0.85;
+                const altBase = ag.tipo === 'larva'
+                    ? nodo.posicionMundo.y + 0.16 + Math.min(0.42, ag.tiempoEstado * 0.025)
+                    : ag.tipo === 'catarina'
+                    ? altPlanta * 0.65
+                    : altPlanta * 0.85;
                 ag.posicion.set(
-                    ag.destino.x + Math.cos(ang) * radio,
-                    altBase + Math.sin(ang * 2) * 0.04,
-                    ag.destino.z + Math.sin(ang) * radio
+                    nodo.posicionMundo.x + Math.cos(ang) * radio,
+                    altBase + (ag.tipo === 'larva' ? Math.sin(ag.tiempoEstado * 9.0) * 0.012 : Math.sin(ang * 2) * 0.04),
+                    nodo.posicionMundo.z + Math.sin(ang) * radio
                 );
                 ag.raiz.position.copyFrom(ag.posicion);
                 ag.raiz.rotation.y = -ang;
+                if (ag.tipo === 'larva') {
+                    // Movimiento de masticación / ondulación al devorar el maíz
+                    ag.raiz.rotation.z = Math.sin(ag.tiempoEstado * 10.0) * 0.16;
+                }
 
                 // Efecto biológico sobre el nodo
                 if (nodo && nodo.sembrada) {
                     if (ag.tipo === 'larva') {
-                        nodo.plaga = Math.min(100, nodo.plaga + 1.2 * dt);
+                        nodo.plaga = Math.min(100, nodo.plaga + 0.75 * dt);
                     } else if (ag.tipo === 'ave') {
                         // Verificar si Don Elote está cerca (radio 2.6 m)
                         if (Vector3.Distance(nodo.posicionMundo, this.POS_DON_ELOTE) < this.RADIO_ESPANTAPAJAROS) {
                             ag.estado = 'HUYENDO';
                             ag.progreso = 0;
                         } else {
-                            nodo.plaga = Math.min(100, nodo.plaga + 1.8 * dt);
+                            nodo.plaga = Math.min(100, nodo.plaga + 1.4 * dt);
                         }
                     } else if (ag.tipo === 'abeja') {
                         nodo.polinizacion = clamp01(nodo.polinizacion + 0.035 * dt);
@@ -440,10 +539,11 @@ export class FaunaMilpa {
             } else if (ag.estado === 'HUYENDO') {
                 ag.progreso = clamp01(ag.progreso + dt * 1.1);
                 Vector3.LerpToRef(ag.destino, ag.origen, ag.progreso, ag.posicion);
-                ag.posicion.y += ag.progreso * 1.2;
+                ag.posicion.y += ag.tipo === 'larva' ? -ag.progreso * 0.28 : ag.progreso * 1.2;
                 ag.raiz.position.copyFrom(ag.posicion);
                 if (ag.progreso >= 1) {
                     ag.estado = 'INACTIVO';
+                    ag.raiz.rotation.set(0, 0, 0);
                     ag.raiz.setEnabled(false);
                 }
             }
@@ -515,11 +615,29 @@ export class FaunaMilpa {
         if (!candidato && dia >= 100 && Vector3.Distance(nodo.posicionMundo, this.POS_DON_ELOTE) >= this.RADIO_ESPANTAPAJAROS) {
             candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'ave');
         }
-        if (!candidato && dia >= 20) {
-            candidato = this.pool.find((a) => a.estado === 'INACTIVO' && (a.tipo === 'larva' || a.tipo === 'abeja'));
+        if (!candidato && dia >= 22) {
+            const larvaeActivas = this.pool.filter((a) => a.tipo === 'larva' && a.estado !== 'INACTIVO').length;
+            const ultimaEnNodo = this.cooldownLarvaNodo.get(nodo.id) ?? -999;
+            const puedeLarva =
+                larvaeActivas < 1 &&
+                this.tiempoTotal - this.tiempoUltimaLarva >= 34.0 &&
+                this.tiempoTotal - ultimaEnNodo >= 75.0 &&
+                Math.random() < 0.32;
+
+            if (puedeLarva) {
+                candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'larva');
+            }
+            if (!candidato) {
+                candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'abeja');
+            }
         }
 
         if (!candidato) return;
+
+        if (candidato.tipo === 'larva') {
+            this.activarEmergenciaLarva(candidato, nodo.id);
+            return;
+        }
 
         candidato.estado = 'LLEGANDO';
         candidato.nodoObjetivo = nodo.id;
@@ -530,5 +648,49 @@ export class FaunaMilpa {
         candidato.destino.y = 0.85;
         candidato.raiz.position.copyFrom(candidato.origen);
         candidato.raiz.setEnabled(true);
+    }
+
+    private activarEmergenciaLarva(candidato: AgenteFauna, nodoId: number): void {
+        const nodo = this.surco.nodos[nodoId];
+        if (!nodo) return;
+        this.tiempoUltimaLarva = this.tiempoTotal;
+        this.cooldownLarvaNodo.set(nodoId, this.tiempoTotal);
+
+        candidato.estado = 'LLEGANDO';
+        candidato.nodoObjetivo = nodoId;
+        candidato.progreso = 0;
+        candidato.tiempoEstado = 0;
+        candidato.raiz.rotation.set(0, 0, 0);
+        // Emerge desde abajo del montículo de tierra hacia la base del tallo del maíz
+        candidato.origen.set(
+            nodo.posicionMundo.x + 0.08,
+            nodo.posicionMundo.y - 0.16,
+            nodo.posicionMundo.z + 0.05
+        );
+        candidato.destino.set(
+            nodo.posicionMundo.x + 0.06,
+            nodo.posicionMundo.y + 0.22,
+            nodo.posicionMundo.z + 0.03
+        );
+        candidato.posicion.copyFrom(candidato.origen);
+        candidato.raiz.position.copyFrom(candidato.origen);
+        candidato.raiz.setEnabled(true);
+
+        this.audio.clickUI();
+        this.bus.emitir({ t: 'plaga', nodo: nodoId, tipo: 'cogollero', resuelta: false });
+        if (this.onMensajeToast) {
+            this.onMensajeToast(
+                `⚠️ 🐛 ¡Alerta! Una oruga emergió bajo la Estación #${nodoId + 1} y empezó a comer el maíz. ¡Retírala con [Clic] o [1] Mano!`
+            );
+        }
+    }
+
+    public forzarEmergenciaLarva(nodoId: number): boolean {
+        const nodo = this.surco.nodos[nodoId];
+        if (!nodo || !nodo.sembrada || nodo.cosechada) return false;
+        const candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'larva');
+        if (!candidato) return false;
+        this.activarEmergenciaLarva(candidato, nodoId);
+        return true;
     }
 }

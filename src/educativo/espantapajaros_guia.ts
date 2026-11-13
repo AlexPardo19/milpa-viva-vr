@@ -14,6 +14,7 @@ import {
   Color3,
   StandardMaterial,
   DynamicTexture,
+  Texture,
   Mesh,
   MeshBuilder,
   TransformNode,
@@ -21,6 +22,11 @@ import {
   ActionManager,
   ExecuteCodeAction
 } from "@babylonjs/core";
+import {
+  configurarSamplingPixel,
+  crearTexMaderaPixel,
+  dibujarMarcoLetreroPixel,
+} from "../ui/texturas_pixel_3d";
 import { TipoSemilla, VARIEDADES_MAIZ } from "../nucleo";
 import { AudioSintetizador } from "../audio_sintetizador";
 import { AjustesSistema } from "../juego/ajustes";
@@ -144,71 +150,63 @@ export class EspantapajarosGuia {
   }
 
   private construirCuerpo(shadowGen: ShadowGenerator | null): void {
-    const woodMat = this.mat("#78350f", 0.3);
+    const woodMat = this.mat("#d4a373", 0.25);
+    woodMat.diffuseTexture = crearTexMaderaPixel(this.scene, false, 1, 4);
 
-    // Poste vertical
-    const poste = MeshBuilder.CreateCylinder("posteEspanta", { diameter: 0.09, height: 1.85 }, this.scene);
+    // Poste vertical voxel
+    const poste = MeshBuilder.CreateBox("posteEspanta", { width: 0.10, height: 1.85, depth: 0.10 }, this.scene);
     poste.position.set(0, 0.925, 0);
     poste.material = woodMat;
     poste.parent = this.root;
-    this.ink(poste);
 
-    // Torso con camisa a cuadros roja
+    // Torso con camisa roja estilo voxel
     const torso = MeshBuilder.CreateBox("torsoEspanta", { width: 0.42, height: 0.50, depth: 0.24 }, this.scene);
     torso.position.set(0, 1.25, 0);
     torso.material = this.mat("#dc2626", 0.45);
     torso.parent = this.root;
-    this.ink(torso);
 
-    // Paliacate rojo al cuello
-    this.neckMesh = MeshBuilder.CreateTorus("paliacateEspanta", { diameter: 0.22, thickness: 0.06 }, this.scene);
+    // Paliacate rojo cuadrado al cuello
+    this.neckMesh = MeshBuilder.CreateBox("paliacateEspanta", { width: 0.30, height: 0.08, depth: 0.26 }, this.scene);
     this.neckMesh.position.set(0, 1.50, 0);
-    this.neckMesh.rotation.x = Math.PI / 2;
     this.neckMesh.material = this.mat("#b91c1c", 0.55);
     this.neckMesh.parent = this.root;
-    this.ink(this.neckMesh);
 
-    // Cabeza de costal / mazorca
-    this.headMesh = MeshBuilder.CreateSphere("cabezaEspanta", { diameter: 0.32, segments: 16 }, this.scene);
-    this.headMesh.position.set(0, 1.66, 0);
+    // Cabeza cúbica de costal / mazorca pixel-art
+    this.headMesh = MeshBuilder.CreateBox("cabezaEspanta", { width: 0.30, height: 0.30, depth: 0.26 }, this.scene);
+    this.headMesh.position.set(0, 1.67, 0);
     this.headMesh.material = this.mat("#fef08a", 0.45);
     this.headMesh.parent = this.root;
-    this.ink(this.headMesh);
 
-    // Sombrero de paja de ala ancha
+    // Sombrero de paja escalonado de ala ancha
     const hatMat = this.mat("#ca8a04", 0.4);
-    this.hatMesh = MeshBuilder.CreateCylinder("alaSombrero", { diameter: 0.58, height: 0.035 }, this.scene);
-    this.hatMesh.position.set(0, 1.82, 0);
+    this.hatMesh = MeshBuilder.CreateBox("alaSombrero", { width: 0.60, height: 0.04, depth: 0.60 }, this.scene);
+    this.hatMesh.position.set(0, 1.83, 0);
     this.hatMesh.material = hatMat;
     this.hatMesh.parent = this.root;
-    this.ink(this.hatMesh);
 
-    const copaSombrero = MeshBuilder.CreateCylinder("copaSombrero", { diameterTop: 0.26, diameterBottom: 0.32, height: 0.18 }, this.scene);
-    copaSombrero.position.set(0, 1.92, 0);
+    const copaSombrero = MeshBuilder.CreateBox("copaSombrero", { width: 0.32, height: 0.18, depth: 0.32 }, this.scene);
+    copaSombrero.position.set(0, 1.93, 0);
     copaSombrero.material = hatMat;
     copaSombrero.parent = this.root;
-    this.ink(copaSombrero);
 
     // Brazos de madera con mangas
     this.leftArm = new TransformNode("leftArmEspanta", this.scene);
     this.leftArm.position.set(-0.22, 1.40, 0);
     this.leftArm.parent = this.root;
 
-    const brazoIzq = MeshBuilder.CreateBox("brazoIzqMesh", { width: 0.42, height: 0.07, depth: 0.07 }, this.scene);
+    const brazoIzq = MeshBuilder.CreateBox("brazoIzqMesh", { width: 0.42, height: 0.08, depth: 0.08 }, this.scene);
     brazoIzq.position.set(-0.20, 0, 0);
     brazoIzq.material = woodMat;
     brazoIzq.parent = this.leftArm;
-    this.ink(brazoIzq, 0.012);
 
     this.rightArm = new TransformNode("rightArmEspanta", this.scene);
     this.rightArm.position.set(0.22, 1.40, 0);
     this.rightArm.parent = this.root;
 
-    const brazoDer = MeshBuilder.CreateBox("brazoDerMesh", { width: 0.42, height: 0.07, depth: 0.07 }, this.scene);
+    const brazoDer = MeshBuilder.CreateBox("brazoDerMesh", { width: 0.42, height: 0.08, depth: 0.08 }, this.scene);
     brazoDer.position.set(0.20, 0, 0);
     brazoDer.material = woodMat;
     brazoDer.parent = this.rightArm;
-    this.ink(brazoDer, 0.012);
 
     if (shadowGen) {
       shadowGen.addShadowCaster(poste);
@@ -235,37 +233,37 @@ export class EspantapajarosGuia {
     const matCarbon = this.mat("#0f172a", 0.1);
     const matPeloElote = this.mat("#d97706", 0.5);
 
-    // Ojos de botón de carbón con reflejos simpáticos
-    const ojoIzq = MeshBuilder.CreateSphere("ojoIzqEspanta", { diameter: 0.045 }, this.scene);
-    ojoIzq.position.set(-0.065, 1.70, 0.14);
+    // Ojos de botón cuadrados estilo pixel
+    const ojoIzq = MeshBuilder.CreateBox("ojoIzqEspanta", { size: 0.044 }, this.scene);
+    ojoIzq.position.set(-0.065, 1.71, 0.138);
     ojoIzq.material = matCarbon;
     ojoIzq.parent = this.root;
 
-    const ojoDer = MeshBuilder.CreateSphere("ojoDerEspanta", { diameter: 0.045 }, this.scene);
-    ojoDer.position.set(0.065, 1.70, 0.14);
+    const ojoDer = MeshBuilder.CreateBox("ojoDerEspanta", { size: 0.044 }, this.scene);
+    ojoDer.position.set(0.065, 1.71, 0.138);
     ojoDer.material = matCarbon;
     ojoDer.parent = this.root;
 
-    // Sonrisa cosida con puntos rústicos
+    // Sonrisa cosida con puntos voxel rústicos
     for (let i = -2; i <= 2; i++) {
-      const puntoBoca = MeshBuilder.CreateSphere(`bocaPunto_${i}`, { diameter: 0.022 }, this.scene);
+      const puntoBoca = MeshBuilder.CreateBox(`bocaPunto_${i}`, { size: 0.024 }, this.scene);
       const x = i * 0.032;
-      const y = 1.58 + Math.abs(i) * 0.01;
-      puntoBoca.position.set(x, y, 0.148);
+      const y = 1.585 + Math.abs(i) * 0.01;
+      puntoBoca.position.set(x, y, 0.14);
       puntoBoca.material = matCarbon;
       puntoBoca.parent = this.root;
     }
 
-    // Bigote simpático de estigmas / pelos de elote
-    const bigoteIzq = MeshBuilder.CreateCylinder("bigoteIzq", { height: 0.09, diameter: 0.02 }, this.scene);
-    bigoteIzq.position.set(-0.05, 1.63, 0.15);
-    bigoteIzq.rotation.z = Math.PI / 3;
+    // Bigote pixelado de pelos de elote
+    const bigoteIzq = MeshBuilder.CreateBox("bigoteIzq", { width: 0.085, height: 0.024, depth: 0.024 }, this.scene);
+    bigoteIzq.position.set(-0.05, 1.635, 0.142);
+    bigoteIzq.rotation.z = -0.25;
     bigoteIzq.material = matPeloElote;
     bigoteIzq.parent = this.root;
 
-    const bigoteDer = MeshBuilder.CreateCylinder("bigoteDer", { height: 0.09, diameter: 0.02 }, this.scene);
-    bigoteDer.position.set(0.05, 1.63, 0.15);
-    bigoteDer.rotation.z = -Math.PI / 3;
+    const bigoteDer = MeshBuilder.CreateBox("bigoteDer", { width: 0.085, height: 0.024, depth: 0.024 }, this.scene);
+    bigoteDer.position.set(0.05, 1.635, 0.142);
+    bigoteDer.rotation.z = 0.25;
     bigoteDer.material = matPeloElote;
     bigoteDer.parent = this.root;
   }
@@ -273,7 +271,8 @@ export class EspantapajarosGuia {
   private construirGloboDialogo(): void {
     const W = 512;
     const H = 200;
-    this.globoTex = new DynamicTexture("texGloboEspanta", { width: W, height: H }, this.scene, true);
+    this.globoTex = new DynamicTexture("texGloboEspanta", { width: W, height: H }, this.scene, false, Texture.NEAREST_SAMPLINGMODE);
+    configurarSamplingPixel(this.globoTex);
 
     const mat = new StandardMaterial("matGloboEspanta", this.scene);
     mat.diffuseTexture = this.globoTex;
@@ -290,7 +289,6 @@ export class EspantapajarosGuia {
     this.globoMesh.material = mat;
     this.globoMesh.parent = this.root;
 
-    this.ink(this.globoMesh, 0.018);
     this.globoMesh.isPickable = true;
     this.globoMesh.actionManager = new ActionManager(this.scene);
     this.globoMesh.actionManager.registerAction(
@@ -308,12 +306,7 @@ export class EspantapajarosGuia {
     const W = 512;
     const H = 200;
 
-    ctx.fillStyle = "#fffdf0";
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.strokeStyle = "#854d0e";
-    ctx.lineWidth = 8;
-    ctx.strokeRect(4, 4, W - 8, H - 8);
+    dibujarMarcoLetreroPixel(ctx, W, H, "#fffdf0", "#451a03", "#d97706", 5);
 
     // Cabecera con título
     ctx.fillStyle = "#92400e";
@@ -329,7 +322,8 @@ export class EspantapajarosGuia {
     let y = 70;
     for (const palabra of palabras) {
       const prueba = linea + palabra + " ";
-      if (ctx.measureText(prueba).width > W - 42) {
+      const ancho = typeof ctx.measureText === "function" ? ctx.measureText(prueba).width : prueba.length * 10;
+      if (ancho > W - 42) {
         ctx.fillText(linea, 20, y);
         linea = palabra + " ";
         y += 26;
@@ -406,11 +400,7 @@ export class EspantapajarosGuia {
     const W = 512;
     const H = 200;
 
-    ctx.fillStyle = "#fffdf0";
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "#854d0e";
-    ctx.lineWidth = 6;
-    ctx.strokeRect(4, 4, W - 8, H - 8);
+    dibujarMarcoLetreroPixel(ctx, W, H, "#fffdf0", "#451a03", "#d97706", 5);
 
     ctx.fillStyle = "#92400e";
     ctx.font = 'bold 22px "Pixelify Sans", monospace';

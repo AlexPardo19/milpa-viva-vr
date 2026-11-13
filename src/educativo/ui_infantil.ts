@@ -35,6 +35,8 @@ export interface UIEducativaCallbacks {
   onAbrirAlmacen?: () => void;
   onToggleClima?: () => void;
   onAbrirControles?: () => void;
+  onAbrirDispensador?: () => void;
+  onAbrirPausa?: () => void;
 }
 
 export class UIEducativa {
@@ -96,7 +98,7 @@ export class UIEducativa {
         position: fixed;
         inset: 0;
         pointer-events: none;
-        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        font-family: var(--fuente-px);
         color: #1e293b;
         user-select: none;
         z-index: 100;
@@ -117,24 +119,24 @@ export class UIEducativa {
         pointer-events: none;
       }
 
-      /* 1. Panel Izquierdo Compacto de Estado de Parcela */
+      /* 1. Panel Izquierdo Compacto de Estado de Parcela (Pixel Translúcido) */
       .stats-panel {
         pointer-events: auto;
-        background: rgba(15, 23, 18, 0.84);
-        backdrop-filter: blur(8px);
-        border: 1.5px solid rgba(74, 222, 128, 0.45);
-        border-radius: 14px;
+        background: rgba(10, 16, 12, 0.56);
+        border: 2px solid rgba(74, 222, 128, 0.50);
+        border-radius: 0;
         padding: 8px 11px;
-        width: 210px;
+        width: 215px;
         color: #f8fafc;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+        box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
+        text-shadow: 1px 1px 0 #000;
         transition: opacity 0.2s ease, transform 0.2s ease;
       }
       .stats-header-dia {
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+        border-bottom: 2px solid rgba(255, 255, 255, 0.16);
         padding-bottom: 4px;
         margin-bottom: 6px;
       }
@@ -144,7 +146,7 @@ export class UIEducativa {
         color: #fbbf24;
       }
       .dia-etapa {
-        font-size: 10.5px;
+        font-size: 11px;
         font-weight: 700;
         color: #86efac;
         text-align: right;
@@ -156,32 +158,33 @@ export class UIEducativa {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-size: 10.5px;
+        font-size: 11px;
         font-weight: 700;
         color: #e2e8f0;
         margin-bottom: 2px;
       }
       .stat-bar-bg {
         height: 6px;
-        background: rgba(255, 255, 255, 0.14);
-        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 0;
         overflow: hidden;
       }
       .stat-bar-fill {
         height: 100%;
         width: 0%;
-        border-radius: 4px;
+        border-radius: 0;
         transition: width 0.35s ease;
       }
-      .fill-tierra { background: linear-gradient(90deg, #d97706, #f59e0b); }
-      .fill-agua { background: linear-gradient(90deg, #0284c7, #38bdf8); }
-      .fill-nutrientes { background: linear-gradient(90deg, #16a34a, #4ade80); }
+      .fill-tierra { background: #f59e0b; }
+      .fill-agua { background: #38bdf8; }
+      .fill-nutrientes { background: #4ade80; }
 
       .inv-mazorcas-pill {
         margin-top: 6px;
-        background: rgba(245, 158, 11, 0.18);
-        border: 1px solid rgba(251, 191, 36, 0.5);
-        border-radius: 8px;
+        background: rgba(245, 158, 11, 0.24);
+        border: 2px solid rgba(251, 191, 36, 0.55);
+        border-radius: 0;
         padding: 3px 7px;
         font-size: 11px;
         font-weight: 800;
@@ -190,20 +193,20 @@ export class UIEducativa {
         cursor: pointer;
       }
       .inv-mazorcas-pill:hover {
-        background: rgba(245, 158, 11, 0.32);
+        background: rgba(245, 158, 11, 0.40);
       }
 
-      /* 2. Píldora Central Compacta de Misión */
+      /* 2. Píldora Central Compacta de Misión (Pixel Translúcida) */
       .mision-header {
         pointer-events: auto;
         max-width: 390px;
-        background: rgba(15, 23, 18, 0.82);
-        backdrop-filter: blur(8px);
-        border: 1.5px solid rgba(251, 191, 36, 0.5);
-        border-radius: 14px;
+        background: rgba(10, 16, 12, 0.56);
+        border: 2px solid rgba(251, 191, 36, 0.52);
+        border-radius: 0;
         padding: 6px 12px;
         color: #f8fafc;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+        box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
+        text-shadow: 1px 1px 0 #000;
         display: flex;
         flex-direction: column;
         gap: 3px;
@@ -219,10 +222,10 @@ export class UIEducativa {
         line-height: 1;
       }
       .mision-badge {
-        background: rgba(251, 191, 36, 0.2);
+        background: rgba(251, 191, 36, 0.22);
         color: #fde047;
         border: 1px solid #eab308;
-        border-radius: 8px;
+        border-radius: 0;
         padding: 1px 6px;
         font-size: 9.5px;
         font-weight: 800;
@@ -244,11 +247,11 @@ export class UIEducativa {
         gap: 8px;
         font-size: 10px;
         color: #93c5fd;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        border-top: 1px solid rgba(255, 255, 255, 0.16);
         padding-top: 3px;
       }
 
-      /* 3. Barra Derecha de Botones de Menús */
+      /* 3. Barra Derecha de Botones de Menús (Pixel Translúcidos) */
       .menus-top-bar {
         pointer-events: auto;
         display: flex;
@@ -258,29 +261,30 @@ export class UIEducativa {
         max-width: 440px;
       }
       .menu-top-btn {
-        background: rgba(15, 23, 18, 0.86);
-        backdrop-filter: blur(8px);
-        border: 1.5px solid rgba(255, 255, 255, 0.22);
-        border-radius: 10px;
-        padding: 5px 9px;
+        background: rgba(10, 16, 12, 0.58);
+        border: 2px solid rgba(255, 255, 255, 0.24);
+        border-radius: 0;
+        padding: 4px 8px;
         font-size: 11px;
         font-weight: 700;
         color: #f8fafc;
+        text-shadow: 1px 1px 0 #000;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
-        transition: all 0.15s ease;
+        box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+        transition: all 0.12s ease;
       }
       .menu-top-btn:hover {
-        background: rgba(30, 41, 59, 0.95);
+        background: rgba(25, 36, 30, 0.80);
         border-color: #fbbf24;
         transform: translateY(-1px);
       }
       .menu-top-btn kbd {
-        background: rgba(255, 255, 255, 0.14);
-        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 0;
         padding: 0px 4px;
         font-size: 9.5px;
         color: #fde68a;
@@ -290,19 +294,20 @@ export class UIEducativa {
       /* Banner Meteorológico Compacto */
       .banner-clima-alerta {
         position: fixed;
-        top: 68px;
+        top: 72px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(153, 27, 27, 0.92);
+        background: rgba(127, 29, 29, 0.65);
         color: #fef2f2;
-        border: 1.5px solid #fca5a5;
-        border-radius: 12px;
-        padding: 5px 14px;
+        border: 2px solid rgba(252, 165, 165, 0.72);
+        border-radius: 0;
+        padding: 4px 12px;
         font-size: 12px;
         font-weight: 800;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+        text-shadow: 1px 1px 0 #000;
+        box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
         display: none;
-        pointer-events: auto;
+        pointer-events: none;
         z-index: 140;
       }
 
@@ -322,20 +327,19 @@ export class UIEducativa {
         flex-wrap: wrap;
         justify-content: center;
         gap: 5px;
-        background: rgba(15, 23, 18, 0.88);
-        backdrop-filter: blur(8px);
-        border: 1.5px solid rgba(74, 222, 128, 0.45);
-        border-radius: 14px;
+        background: rgba(10, 16, 12, 0.72);
+        border: 2px solid rgba(74, 222, 128, 0.45);
+        border-radius: 0;
         padding: 6px 10px;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
       }
       .labores-drawer.abierto {
         display: flex;
       }
       .labor-btn {
         background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 9px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-radius: 0;
         padding: 4px 9px;
         font-size: 11px;
         font-weight: 700;
@@ -414,12 +418,11 @@ export class UIEducativa {
         transform: translateY(-8px);
       }
 
-      /* Modal de Celebración / Trofeo */
+      /* Modal de Celebración / Trofeo Estilo Pixel */
       .modal-celebracion {
         position: fixed;
         inset: 0;
-        background: rgba(15, 23, 42, 0.68);
-        backdrop-filter: blur(8px);
+        background: rgba(8, 12, 10, 0.72);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -433,27 +436,29 @@ export class UIEducativa {
         pointer-events: auto;
       }
       .trofeo-card {
-        background: #fffdf0;
-        border: 3.5px solid #2a3417;
-        border-radius: 26px;
-        padding: 26px 30px;
+        background: #c6c6c6;
+        border: 4px solid;
+        border-color: #ffffff #555555 #555555 #ffffff;
+        box-shadow: 0 0 0 4px #000000;
+        border-radius: 0;
+        padding: 24px 28px;
         max-width: 440px;
         text-align: center;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.45);
+        color: #1e1e1e;
       }
       .trofeo-icono {
-        font-size: 60px;
+        font-size: 54px;
         margin-bottom: 8px;
       }
       .trofeo-titulo {
         font-size: 24px;
         font-weight: 900;
-        color: #ca8a04;
+        color: #854d0e;
         margin: 0 0 8px 0;
       }
       .trofeo-subtitulo {
         font-size: 14px;
-        color: #334155;
+        color: #292524;
         font-weight: 600;
         line-height: 1.4;
         margin: 0 0 16px 0;
@@ -467,8 +472,8 @@ export class UIEducativa {
       }
       .medalla-item {
         background: #fef08a;
-        border: 1.5px solid #eab308;
-        border-radius: 10px;
+        border: 2px solid #854d0e;
+        border-radius: 0;
         padding: 4px 8px;
         font-size: 11px;
         font-weight: 800;
@@ -476,8 +481,9 @@ export class UIEducativa {
       .btn-reiniciar-cultivo {
         background: #16a34a;
         color: #ffffff;
-        border: 2px solid #14532d;
-        border-radius: 14px;
+        border: 3px solid;
+        border-color: #86efac #14532d #14532d #86efac;
+        border-radius: 0;
         padding: 10px 22px;
         font-size: 14px;
         font-weight: 800;
@@ -571,6 +577,7 @@ export class UIEducativa {
     menusBar.className = "menus-top-bar";
 
     const botonesMenus: { icon: string; label: string; key: string; fn: () => void }[] = [
+      { icon: "🌰", label: "Dispensador", key: "U", fn: () => this.callbacks.onAbrirDispensador?.() },
       { icon: "🧬", label: "Semillas", key: "M", fn: () => this.callbacks.onAbrirBancoSemillas?.() },
       { icon: "🏛️", label: "Troje", key: "I", fn: () => this.callbacks.onAbrirAlmacen?.() },
       { icon: "🔥", label: "Fogón", key: "F", fn: () => this.callbacks.onAbrirFogon?.() },
@@ -578,7 +585,8 @@ export class UIEducativa {
       { icon: "⛅", label: "Clima", key: "C", fn: () => this.callbacks.onToggleClima?.() },
       { icon: "🔬", label: "Lab 3D", key: "H", fn: () => this.callbacks.onToggleModoCientifico() },
       { icon: "🎮", label: "Controles", key: "?", fn: () => this.callbacks.onAbrirControles?.() },
-      { icon: "⚙️", label: "Ajustes", key: "O", fn: () => this.callbacks.onAbrirAjustes?.() }
+      { icon: "⚙️", label: "Ajustes", key: "O", fn: () => this.callbacks.onAbrirAjustes?.() },
+      { icon: "☰", label: "Pausa", key: "Esc", fn: () => this.callbacks.onAbrirPausa?.() }
     ];
 
     botonesMenus.forEach((m) => {
@@ -697,7 +705,7 @@ export class UIEducativa {
    * Muestra un mensaje flotante compacto sobre la barra inferior sin tapar el centro 3D
    */
   /**
-   * Muestra un mensaje flotante compacto en cola con duración adaptativa según longitud
+   * Muestra notificaciones de acción discretas y traslúcidas encima de la hotbar y rótulo del ítem.
    */
   public mostrarToast(texto: string): void {
     let container = document.getElementById("milpa-toast-container");
@@ -706,40 +714,40 @@ export class UIEducativa {
       container.id = "milpa-toast-container";
       container.style.cssText = `
         position: fixed;
-        bottom: 84px;
+        bottom: 184px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
         flex-direction: column-reverse;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
         pointer-events: none;
-        z-index: 2000;
-        max-width: min(680px, 92vw);
+        z-index: 1600;
+        max-width: min(520px, 88vw);
       `;
       document.body.appendChild(container);
     }
 
-    // Limitar a máximo 3 toasts simultáneos para no saturar
-    while (container.children.length >= 3) {
+    // Máximo 2 avisos apilados para no invadir la escena 3D
+    while (container.children.length >= 2) {
       container.firstElementChild?.remove();
     }
 
     const toast = document.createElement("div");
     toast.className = "mc-toast-msg";
     toast.style.cssText = `
-      background: rgba(15, 23, 18, 0.94);
-      border: 3px solid #25330f;
-      outline: 2px solid #fbbf24;
-      padding: 6px 14px;
+      background: rgba(10, 16, 12, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 0;
+      padding: 4px 12px;
       font-family: 'Pixelify Sans', 'VT323', monospace;
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 700;
       color: #f8fafc;
-      text-shadow: 2px 2px 0 #1e293b;
+      text-shadow: 1.5px 1.5px 0 rgba(0, 0, 0, 0.92);
       text-align: center;
       image-rendering: pixelated;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+      box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.30);
       transition: opacity 0.3s ease, transform 0.3s ease;
       transform: translateY(0);
       opacity: 1;
@@ -747,13 +755,13 @@ export class UIEducativa {
     toast.textContent = texto;
     container.appendChild(toast);
 
-    // Duración adaptativa: mínimo 2.2s, más 30ms por carácter adicional
-    const duracionMs = Math.max(2200, Math.min(5000, 2000 + texto.length * 30));
+    // Duración ligera y no intrusiva
+    const duracionMs = Math.max(1900, Math.min(3600, 1600 + texto.length * 22));
 
     setTimeout(() => {
       toast.style.opacity = "0";
-      toast.style.transform = "translateY(6px)";
-      setTimeout(() => toast.remove(), 320);
+      toast.style.transform = "translateY(-4px)";
+      setTimeout(() => toast.remove(), 300);
     }, duracionMs);
   }
 
