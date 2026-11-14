@@ -15,6 +15,7 @@
     "@babylonjs/core": "^6.49.0",
     "@babylonjs/gui": "^6.49.0",
     "@babylonjs/inspector": "^6.49.0",
+    "@babylonjs/materials": "^6.49.0",
     "@fontsource/pixelify-sans": "^5.3.0",
     "@fontsource/vt323": "^5.3.0"
   },

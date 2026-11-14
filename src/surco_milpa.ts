@@ -23,10 +23,6 @@ import {
 } from "@babylonjs/core";
 import {
   configurarSamplingPixel,
-  crearTexAguaPixel,
-  crearTexMaderaPixel,
-  crearTexRuidoSueloPixel,
-  crearTexTierraSurcoPixel,
   dibujarMarcoLetreroPixel,
 } from "./ui/texturas_pixel_3d";
 import {
@@ -46,6 +42,10 @@ import {
   RasgosHeredables,
   clamp01
 } from "./nucleo";
+import {
+  PBRMaterial as BabylonPBRMaterial,
+} from "@babylonjs/core";
+import { crearMaterialPatrixPBR, obtenerBancoPatrix } from "./ui/texturas_patrix_pbr";
 import { ClimateState, Metricas, calcularMetricas } from "./clima";
 import { EstadoCrecimiento, ESTADO_CRECIMIENTO_INICIAL } from "./crecimiento";
 import { MaizEstilizado } from "./maiz_estilizado";
@@ -90,9 +90,9 @@ export interface NodoSurco {
   estadoCrec: EstadoCrecimiento;
   maiz: MaizEstilizado;
   monticuloMesh: Mesh;
-  monticuloMat: StandardMaterial;
+  monticuloMat: BabylonPBRMaterial;
   charcoMesh: Mesh;
-  charcoMat: StandardMaterial;
+  charcoMat: BabylonPBRMaterial;
   marcadorTeleport: Mesh;
   letreroMadera: Mesh;
   letreroTex: DynamicTexture;
@@ -112,7 +112,7 @@ export class SurcoMilpa {
   public nodoSeleccionadoId = 0;
 
   private camellonMesh!: Mesh;
-  private camellonMat!: StandardMaterial;
+  private camellonMat!: BabylonPBRMaterial;
   private timerContornos = 0;
 
   constructor(
@@ -134,11 +134,13 @@ export class SurcoMilpa {
     const D = 0.95;
     const H = 0.18;
 
-    this.camellonMat = new StandardMaterial("matCamellon", this.scene);
-    this.camellonMat.diffuseTexture = crearTexTierraSurcoPixel(this.scene, 8, 2);
-    this.camellonMat.diffuseColor = Color3.FromHexString("#e2c5a6");
-    this.camellonMat.emissiveColor = Color3.FromHexString("#3a220c");
-    this.camellonMat.specularColor = new Color3(0.03, 0.03, 0.03);
+    this.camellonMat = crearMaterialPatrixPBR(this.scene, "tierra_surco", {
+      nombre: "matCamellonPatrix",
+      uScale: 8,
+      vScale: 2,
+      albedoColor: new Color3(0.95, 0.90, 0.85),
+    });
+    this.camellonMat.roughness = 0.94;
 
     this.camellonMesh = MeshBuilder.CreateBox("camellonSurco", {
       width: W,
@@ -154,6 +156,20 @@ export class SurcoMilpa {
     }
   }
 
+  private aplicarEstadoSuelo(
+    nodo: NodoSurco,
+    suelo60: { colorTierra: Color3; laminillaAgua: number }
+  ): void {
+    const c = suelo60.colorTierra;
+    nodo.monticuloMat.albedoColor = new Color3(
+      Math.min(1.28, 0.56 + c.r * 0.95),
+      Math.min(1.22, 0.52 + c.g * 0.95),
+      Math.min(1.16, 0.48 + c.b * 0.95)
+    );
+    const humNorm = Math.max(0, Math.min(1, (nodo.humedadVWC - 15) / 42));
+    nodo.monticuloMat.roughness = 0.95 - humNorm * 0.46;
+  }
+
   private inicializarNodos(): void {
     const coordsX = [-2.0, -1.2, -0.4, 0.4, 1.2, 2.0];
     const variedadesDefault: TipoSemilla[] = [
@@ -165,18 +181,19 @@ export class SurcoMilpa {
       "azul"
     ];
 
-    const texRuidoSuelo = crearTexRuidoSueloPixel(this.scene);
-    const texAguaCharco = crearTexAguaPixel(this.scene, 1, 1);
+    const matTutor = crearMaterialPatrixPBR(this.scene, "madera_roble", {
+      nombre: "matTutorPatrix",
+      uScale: 1,
+      vScale: 3,
+    });
 
-    const matTutor = new StandardMaterial("matTutor", this.scene);
-    matTutor.diffuseTexture = crearTexMaderaPixel(this.scene, false, 1, 3);
-    matTutor.diffuseColor = Color3.FromHexString("#e8c8a0");
-    matTutor.emissiveColor = Color3.FromHexString("#3b1a04").scale(0.28);
-
-    const matPetate = new StandardMaterial("matPetate", this.scene);
-    matPetate.diffuseColor = Color3.FromHexString("#fde68a");
-    matPetate.emissiveColor = Color3.FromHexString("#ca8a04").scale(0.35);
-    matPetate.alpha = 0.85;
+    const matPetate = crearMaterialPatrixPBR(this.scene, "paja_paca", {
+      nombre: "matPetatePatrix",
+      uScale: 1,
+      vScale: 2,
+      albedoColor: new Color3(1.12, 1.04, 0.82),
+    });
+    matPetate.alpha = 0.92;
 
     for (let i = 0; i < coordsX.length; i++) {
       const x = coordsX[i];
@@ -185,11 +202,13 @@ export class SurcoMilpa {
       const posTeleport = new Vector3(x, 0.02, -1.15);
 
       // A. Montículo voxel pixel-art de aporque/labranza
-      const montMat = new StandardMaterial(`montMat_${i}`, this.scene);
-      montMat.diffuseTexture = texRuidoSuelo;
-      montMat.diffuseColor = Color3.FromHexString("#7a4c22");
-      montMat.emissiveColor = Color3.FromHexString("#38200b");
-      montMat.specularColor = new Color3(0.03, 0.03, 0.03);
+      const montMat = crearMaterialPatrixPBR(this.scene, "tierra_surco", {
+        nombre: `montMatPatrix_${i}`,
+        uScale: 1.5,
+        vScale: 1.5,
+        albedoColor: new Color3(0.95, 0.88, 0.80),
+      });
+      montMat.roughness = 0.92;
 
       const montMesh = MeshBuilder.CreateBox(`monticuloNodo_${i}`, {
         width: 0.62,
@@ -202,11 +221,16 @@ export class SurcoMilpa {
       montMesh.parent = this.root;
 
       // B. Lámina pixelada de encharcamiento / charco
-      const charcoMat = new StandardMaterial(`charcoMat_${i}`, this.scene);
-      charcoMat.diffuseTexture = texAguaCharco;
-      charcoMat.diffuseColor = Color3.FromHexString("#bae6fd");
+      const bancoPatrix = obtenerBancoPatrix(this.scene);
+      const charcoMat = new BabylonPBRMaterial(`charcoMat_${i}`, this.scene);
+      charcoMat.albedoColor = Color3.FromHexString("#2c586b");
+      charcoMat.bumpTexture = bancoPatrix.aguaNormal;
+      charcoMat.bumpTexture.level = 0.4;
+      charcoMat.metallic = 0.14;
+      charcoMat.roughness = 0.05;
       charcoMat.alpha = 0.0;
-      charcoMat.specularColor = new Color3(0.4, 0.5, 0.7);
+      charcoMat.transparencyMode = BabylonPBRMaterial.PBRMATERIAL_ALPHABLEND;
+      charcoMat.metadata = { patrixSkip: true };
 
       const charcoMesh = MeshBuilder.CreateBox(`charcoNodo_${i}`, {
         width: 0.52,
@@ -218,11 +242,13 @@ export class SurcoMilpa {
       charcoMesh.material = charcoMat;
       charcoMesh.parent = this.root;
 
-      // C. Marcador de teletransporte con huellas diegéticas
-      const padMat = new StandardMaterial(`padMat_${i}`, this.scene);
-      padMat.diffuseColor = Color3.FromHexString("#d97706");
-      padMat.emissiveColor = Color3.FromHexString("#92400e");
-      padMat.alpha = 0.75;
+      // C. Marcador de teletransporte con losa rústica Patrix
+      const padMat = crearMaterialPatrixPBR(this.scene, "piedra_cobble", {
+        nombre: `padMat_${i}`,
+        uScale: 1,
+        vScale: 1,
+        albedoColor: new Color3(1.18, 1.04, 0.84),
+      });
 
       const padMesh = MeshBuilder.CreateDisc(`padTeleport_${i}`, {
         radius: 0.22,
@@ -535,7 +561,7 @@ export class SurcoMilpa {
 
     // Actualizar visual del montículo (queda arado al 100% listo para nueva siembra)
     const suelo60 = obtenerEstadoSuelo60(100, nodo.humedadVWC, nodo.humedadVWC > 38);
-    nodo.monticuloMat.diffuseColor = suelo60.colorTierra;
+    this.aplicarEstadoSuelo(nodo, suelo60);
     nodo.surcosMesh.forEach((s) => {
       s.scaling.y = 1.0;
       s.scaling.x = 1.35;
@@ -609,7 +635,7 @@ export class SurcoMilpa {
     if (nodo.sembrada && nodo.plantaInterna.estado !== "MUERTA" && !nodo.cosechada && nodo.humedadVWC > 38) {
       nodo.humedadVWC = Math.max(28, nodo.humedadVWC - 12);
       const suelo60 = obtenerEstadoSuelo60(nodo.tierraArada, nodo.humedadVWC, nodo.humedadVWC > 38);
-      nodo.monticuloMat.diffuseColor = suelo60.colorTierra;
+      this.aplicarEstadoSuelo(nodo, suelo60);
       nodo.charcoMat.alpha = suelo60.laminillaAgua;
       if (this.particulas) {
         this.particulas.emitirPolvo(nodo.posicionMundo.add(new Vector3(0, 0.1, 0)));
@@ -645,7 +671,7 @@ export class SurcoMilpa {
     nodo.tierraArada = Math.min(100, nodo.tierraArada + incremento);
     const suelo60 = obtenerEstadoSuelo60(nodo.tierraArada, nodo.humedadVWC, false);
 
-    nodo.monticuloMat.diffuseColor = suelo60.colorTierra;
+    this.aplicarEstadoSuelo(nodo, suelo60);
     nodo.monticuloMesh.scaling.y = 1.0 + suelo60.rugosidad * 0.35;
 
     const nivelArado = nodo.tierraArada / 100;
@@ -751,7 +777,7 @@ export class SurcoMilpa {
     nodo.humedadVWC = Math.min(60, nodo.humedadVWC + incremento);
     const suelo60 = obtenerEstadoSuelo60(nodo.tierraArada, nodo.humedadVWC, nodo.humedadVWC > 38);
 
-    nodo.monticuloMat.diffuseColor = suelo60.colorTierra;
+    this.aplicarEstadoSuelo(nodo, suelo60);
     nodo.charcoMat.alpha = suelo60.laminillaAgua;
 
     if (this.particulas) {
@@ -777,7 +803,7 @@ export class SurcoMilpa {
 
     nodo.humedadVWC = Math.min(60, nodo.humedadVWC + caudal * 12.0 * dt);
     const suelo60 = obtenerEstadoSuelo60(nodo.tierraArada, nodo.humedadVWC, nodo.humedadVWC > 38);
-    nodo.monticuloMat.diffuseColor = suelo60.colorTierra;
+    this.aplicarEstadoSuelo(nodo, suelo60);
     nodo.charcoMat.alpha = suelo60.laminillaAgua;
     this.actualizarLetrero(id);
   }
@@ -1172,7 +1198,7 @@ export class SurcoMilpa {
         nodo.humedadVWC,
         nodo.humedadVWC > 38
       );
-      nodo.monticuloMat.diffuseColor = suelo60.colorTierra;
+      this.aplicarEstadoSuelo(nodo, suelo60);
       nodo.charcoMat.alpha = suelo60.laminillaAgua;
 
       this.actualizarLetrero(nodo.id);

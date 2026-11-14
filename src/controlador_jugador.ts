@@ -136,7 +136,7 @@ export class ControladorJugador {
     this.camaraFPS.setTarget(new Vector3(-0.35, 0.38, 0));
     this.camaraFPS.inputs.clear();
     this.camaraFPS.minZ = 0.12;
-    this.camaraFPS.maxZ = 250.0;
+    this.camaraFPS.maxZ = 1200.0;
 
     // 2. Inicializar Viewmodel de Manos y Herramientas
     this.viewmodel = new ViewmodelHerramientas(scene, this.camaraFPS, audio, particulas);

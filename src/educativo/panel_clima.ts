@@ -436,18 +436,22 @@ export class PanelClima {
 
     // D. Botón Ciclo Solar Automático
     this.btnCicloSolar = document.createElement("button");
-    this.btnCicloSolar.className = "btn-ciclo-solar";
-    this.btnCicloSolar.innerHTML = `<span>🔄</span><span>Ciclo Solar Automático: OFF</span>`;
+    this.btnCicloSolar.className = "btn-ciclo-solar activo";
+    this.btnCicloSolar.innerHTML = `<span>☀️</span><span>Ciclo Solar Automático: ON</span>`;
     this.btnCicloSolar.addEventListener("click", () => {
       const activo = this.callbacks.onToggleCicloSolar();
-      this.btnCicloSolar.classList.toggle("activo", activo);
-      this.btnCicloSolar.innerHTML = activo
-        ? `<span>☀️</span><span>Ciclo Solar Automático: ON</span>`
-        : `<span>🔄</span><span>Ciclo Solar Automático: OFF</span>`;
+      this.actualizarEstadoCicloSolar(activo);
     });
     this.panelCard.appendChild(this.btnCicloSolar);
 
     this.contenedor.appendChild(this.panelCard);
+  }
+
+  public actualizarEstadoCicloSolar(activo: boolean): void {
+    this.btnCicloSolar.classList.toggle("activo", activo);
+    this.btnCicloSolar.innerHTML = activo
+      ? `<span>☀️</span><span>Ciclo Solar Automático: ON</span>`
+      : `<span>🔄</span><span>Ciclo Solar Automático: OFF</span>`;
   }
 
   public actualizarValoresUI(): void {
@@ -456,7 +460,8 @@ export class PanelClima {
       if (item) {
         const val = this.clima[def.key];
         item.slider.value = val.toString();
-        item.valueLabel.textContent = `${typeof val === "number" ? val.toFixed(def.paso < 1 ? 1 : 0) : val} ${def.unidad}`;
+        const decimales = def.paso < 0.1 ? 2 : def.paso < 1 ? 1 : 0;
+        item.valueLabel.textContent = `${typeof val === "number" ? val.toFixed(decimales) : val} ${def.unidad}`;
       }
     });
   }

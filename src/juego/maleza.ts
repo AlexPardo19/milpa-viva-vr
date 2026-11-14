@@ -99,7 +99,7 @@ export class MalezaSistema {
 
         const matMaleza = new StandardMaterial('matMalezaThin', this.scene);
         matMaleza.diffuseColor = Color3.FromHexString('#558b2f');
-        matMaleza.emissiveColor = Color3.FromHexString('#33691e').scale(0.18);
+        matMaleza.emissiveColor = Color3.FromHexString('#33691e').scale(0.02);
         matMaleza.specularColor = new Color3(0.05, 0.06, 0.04);
         this.mallaMaleza.material = matMaleza;
 
@@ -132,7 +132,7 @@ export class MalezaSistema {
 
         const matQuelite = new StandardMaterial('matQueliteThin', this.scene);
         matQuelite.diffuseColor = Color3.FromHexString('#2e6b34');
-        matQuelite.emissiveColor = Color3.FromHexString('#1b4320').scale(0.18);
+        matQuelite.emissiveColor = Color3.FromHexString('#1b4320').scale(0.02);
         matQuelite.specularColor = new Color3(0.06, 0.08, 0.05);
         this.mallaQuelite.material = matQuelite;
 

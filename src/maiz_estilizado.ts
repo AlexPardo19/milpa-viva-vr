@@ -103,13 +103,13 @@ export class MaizEstilizado {
   }
 
   // Helper para crear materiales botánicos realistas con iluminación suave y especular orgánico
-  private mat(hex: string, em = 0.20, spec = 0.06): StandardMaterial {
+  private mat(hex: string, em = 0.02, spec = 0.14): StandardMaterial {
     const m = new StandardMaterial(`m_${hex}_${Math.random().toString(36).substring(2, 6)}`, this.scene);
     const c = Color3.FromHexString(hex);
     m.diffuseColor = c;
-    m.emissiveColor = c.scale(em);
-    m.specularColor = new Color3(spec, spec, spec * 0.8);
-    m.specularPower = 32;
+    m.emissiveColor = c.scale(Math.min(0.03, em));
+    m.specularColor = new Color3(spec, spec, spec * 0.85);
+    m.specularPower = 44;
     m.backFaceCulling = false;
     return m;
   }
@@ -249,7 +249,7 @@ export class MaizEstilizado {
     this.kernelTex = this.generarTexturaGranos(varCfg.colorHex);
     this.cobMat.diffuseTexture = this.kernelTex;
     const cGrano = Color3.FromHexString(varCfg.colorHex);
-    this.cobMat.emissiveColor = cGrano.scale(0.18);
+    this.cobMat.emissiveColor = cGrano.scale(0.02);
     this.cobMat.specularColor = new Color3(0.08, 0.08, 0.06);
   }
 
@@ -835,12 +835,12 @@ export class MaizEstilizado {
     if (this.huskMat) {
       const ch = Color3.FromHexString(varCfg.colorBracteasHex);
       this.huskMat.diffuseColor = ch;
-      this.huskMat.emissiveColor = ch.scale(0.18);
+      this.huskMat.emissiveColor = ch.scale(0.02);
     }
     if (this.cobMat) {
       this.cobMat.diffuseTexture = this.generarTexturaGranos(varCfg.colorHex, this.lastCuajado);
       const cg = Color3.FromHexString(varCfg.colorHex);
-      this.cobMat.emissiveColor = cg.scale(0.18);
+      this.cobMat.emissiveColor = cg.scale(0.02);
     }
     this.lastDia = -1;
     this.lastStage = "";
@@ -1106,19 +1106,19 @@ export class MaizEstilizado {
     }
 
     this.stalkMat.diffuseColor = colTallo;
-    this.stalkMat.emissiveColor = colTallo.scale(0.18);
+    this.stalkMat.emissiveColor = colTallo.scale(0.02);
     this.nodeMat.diffuseColor = colNudo;
-    this.nodeMat.emissiveColor = colNudo.scale(0.18);
+    this.nodeMat.emissiveColor = colNudo.scale(0.02);
     this.huskMat.diffuseColor = colTotomoxtle;
-    this.huskMat.emissiveColor = colTotomoxtle.scale(0.18);
+    this.huskMat.emissiveColor = colTotomoxtle.scale(0.02);
     this.tasselMat.diffuseColor = colEspiga;
-    this.tasselMat.emissiveColor = colEspiga.scale(0.18);
+    this.tasselMat.emissiveColor = colEspiga.scale(0.02);
     this.braceRootMat.diffuseColor = colRaiz;
-    this.braceRootMat.emissiveColor = colRaiz.scale(0.18);
+    this.braceRootMat.emissiveColor = colRaiz.scale(0.02);
 
     this.greenMats.forEach((m) => {
       m.diffuseColor = colHoja;
-      m.emissiveColor = colHoja.scale(0.18);
+      m.emissiveColor = colHoja.scale(0.02);
     });
 
     // Actualizar matiz de hojas secas según la causa de muerte o senescencia
@@ -1129,7 +1129,7 @@ export class MaizEstilizado {
     this.dryLeafMats.forEach((m, idx) => {
       const c = colHojaSecaBase.scale(1.0 - idx * 0.1);
       m.diffuseColor = c;
-      m.emissiveColor = c.scale(0.18);
+      m.emissiveColor = c.scale(0.02);
     });
   }
 

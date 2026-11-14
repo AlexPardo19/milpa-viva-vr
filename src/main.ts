@@ -108,7 +108,9 @@ import { MenuPausaMinecraft, MenuPrincipalMinecraft } from "./ui/menu_minecraft"
 const clima: ClimateState = { ...CLIMA_INICIAL };
 let metricas: Metricas = calcularMetricas(clima);
 const estadoCrecimiento: EstadoCrecimiento = { ...ESTADO_CRECIMIENTO_INICIAL };
-let cicloSolarAuto = false;
+const VELOCIDAD_CICLO_MINECRAFT = 24.0 / 1200.0; // 0.02 h/s -> 20 min reales por día completo
+let cicloSolarAuto = true;
+let acumuladorUISolar = 0;
 
 // Estado y componentes educativos
 const estadoEdu = new EstadoEducativo();
@@ -232,6 +234,7 @@ async function crearEscena(): Promise<Scene> {
   camera.lowerRadiusLimit = 2.0;
   camera.upperRadiusLimit = 36.0;
   camera.upperBetaLimit = Math.PI / 2.05;
+  camera.maxZ = 1200.0;
   camera.wheelPrecision = 28;
   camera.attachControl(canvas, true);
   camera.useAutoRotationBehavior = false;
@@ -305,16 +308,18 @@ async function crearEscena(): Promise<Scene> {
   // ---------------------------------------------------------------------------
   // E. FASE 0 (H1 & H2): Inicializar WebXRDefaultExperience ANTES de Locomoción y Manos 6DoF
   // ---------------------------------------------------------------------------
+  (window as any).scene = scene;
+  (window as any).camera = camera;
   let xrExperience: WebXRDefaultExperience | null = null;
   try {
     xrExperience = await scene.createDefaultXRExperienceAsync({
       floorMeshes: [ambiente.grassMesh, ...surcoMilpa.nodos.map((n) => n.marcadorTeleport)]
     });
     scene.activeCamera = camera;
-    (window as any).scene = scene;
-    (window as any).camera = camera;
     xrExperience.baseExperience.onStateChangedObservable.add((state) => {
-      if (state === WebXRState.IN_XR) {
+      const estaEnXR = state === WebXRState.IN_XR;
+      ambiente?.estiloPatrix.ajustarPostProcesoXR(estaEnXR);
+      if (estaEnXR) {
         modalControles?.notificarEstadoXR(true);
       }
     });
@@ -823,6 +828,8 @@ async function crearEscena(): Promise<Scene> {
     },
     onToggleCicloSolar: () => {
       cicloSolarAuto = !cicloSolarAuto;
+      panelClima?.actualizarEstadoCicloSolar(cicloSolarAuto);
+      paneles?.actualizarEstadoCicloSolar(cicloSolarAuto);
       return cicloSolarAuto;
     },
     onToggleRotacionAuto: () => {
@@ -851,6 +858,8 @@ async function crearEscena(): Promise<Scene> {
     },
     onToggleCicloSolar: () => {
       cicloSolarAuto = !cicloSolarAuto;
+      panelClima?.actualizarEstadoCicloSolar(cicloSolarAuto);
+      paneles?.actualizarEstadoCicloSolar(cicloSolarAuto);
       return cicloSolarAuto;
     }
   });
@@ -1678,12 +1687,16 @@ async function crearEscena(): Promise<Scene> {
       paneles?.actualizarConsola(estadoCrecimiento, clima);
       paneles?.actualizarTelemetria(metricas, estadoCrecimiento);
     } else if (!juegoPausado && cicloSolarAuto) {
-      clima.hora = (clima.hora + dt * 0.5) % 24.0;
-      paneles?.actualizarControlClima("hora", clima);
-      panelClima?.actualizarValoresUI();
+      clima.hora = (clima.hora + dt * VELOCIDAD_CICLO_MINECRAFT) % 24.0;
       metricas = calcularMetricas(clima);
       ambiente?.aplicarClima(clima, metricas);
-      paneles?.actualizarTelemetria(metricas, estadoCrecimiento);
+      acumuladorUISolar += dt;
+      if (acumuladorUISolar >= 0.25) {
+        acumuladorUISolar = 0;
+        paneles?.actualizarControlClima("hora", clima);
+        panelClima?.actualizarValoresUI();
+        paneles?.actualizarTelemetria(metricas, estadoCrecimiento);
+      }
     }
 
     // 3. Animación de nubes, molino, animales de granja y oscilación biomecánica por viento
@@ -1773,6 +1786,10 @@ async function crearEscena(): Promise<Scene> {
   // M. Estado inicial (sincronizar Hotbar -> Viewmodel -> EstadoEducativo en Azada [2])
   ambiente.aplicarClima(clima, metricas);
   ambiente.actualizarHumedadVisual(estadoEdu.humedadSuelo);
+  ambiente.estiloPatrix.unificarMaterialesRestantes();
+  ambiente.estiloPatrix.vincularCamara(camera);
+  ambiente.estiloPatrix.vincularCamara(controladorJugador.camaraFPS);
+  ambiente.estiloPatrix.refrescarIBL();
   irADia(estadoCrecimiento, 0, clima);
   maiz.root.setEnabled(false);
 

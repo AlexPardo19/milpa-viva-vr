@@ -39,7 +39,7 @@ export const VARIABLES: VariableDef[] = [
   { key: "temperatura", etiqueta: "Temperatura", unidad: "°C", min: -5, max: 50, paso: 1, color: "#fb923c" },
   { key: "humedad", etiqueta: "Humedad Relativa", unidad: "%", min: 0, max: 100, paso: 1, color: "#38bdf8" },
   { key: "presion", etiqueta: "Presión Atmosférica", unidad: "hPa", min: 700, max: 1050, paso: 1, color: "#a78bfa" },
-  { key: "hora", etiqueta: "Hora Solar", unidad: "h", min: 0, max: 24, paso: 0.25, color: "#facc15" },
+  { key: "hora", etiqueta: "Hora Solar", unidad: "h", min: 0, max: 24, paso: 0.02, color: "#facc15" },
   { key: "nubosidad", etiqueta: "Nubosidad", unidad: "%", min: 0, max: 100, paso: 1, color: "#cbd5e1" },
   { key: "viento", etiqueta: "Velocidad del Viento", unidad: "m/s", min: 0, max: 25, paso: 0.5, color: "#5eead4" },
   { key: "lluvia", etiqueta: "Precipitación", unidad: "mm/h", min: 0, max: 50, paso: 0.5, color: "#60a5fa" },

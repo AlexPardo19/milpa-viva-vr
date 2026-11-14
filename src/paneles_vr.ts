@@ -92,6 +92,7 @@ export class PanelesVR {
   readonly refs: PanelesRefs;
   private sincronizandoSliderDia = false;
   private sincronizandoClima = false;
+  private _onSyncCicloSolar?: (activo: boolean) => void;
 
   private texturasGUI: AdvancedDynamicTexture[] = [];
 
@@ -159,6 +160,10 @@ export class PanelesVR {
     if (this.refs.labelFps) {
       this.refs.labelFps.text = `${fps} FPS`;
     }
+  }
+
+  public actualizarEstadoCicloSolar(activo: boolean): void {
+    this._onSyncCicloSolar?.(activo);
   }
 
   // -------------------------------------------------------------------------
@@ -541,19 +546,25 @@ export class PanelesVR {
     modeGrid.addColumnDefinition(0.35);
     stack.addControl(modeGrid);
 
-    const btnCiclo = Button.CreateSimpleButton("btnCicloSolar", "☀️ Ciclo Solar Auto: PAUSADO");
+    const btnCiclo = Button.CreateSimpleButton("btnCicloSolar", "☀️ Ciclo Solar Auto: EN CURSO");
     btnCiclo.width = "98%";
     btnCiclo.height = "46px";
-    btnCiclo.color = "#2a3417";
-    btnCiclo.background = "rgba(232, 163, 23, 0.25)";
+    btnCiclo.color = "#0f172a";
+    btnCiclo.background = "#e8a317";
     btnCiclo.cornerRadius = 10;
     btnCiclo.fontSize = 22;
     btnCiclo.fontWeight = "bold";
-    btnCiclo.onPointerUpObservable.add(() => {
-      const activo = cb.onToggleCicloSolar();
-      btnCiclo.textBlock!.text = activo ? "☀️ Ciclo Solar Auto: EN CURSO" : "☀️ Ciclo Solar Auto: PAUSADO";
+    const aplicarEstiloCiclo = (activo: boolean) => {
+      if (btnCiclo.textBlock) {
+        btnCiclo.textBlock.text = activo ? "☀️ Ciclo Solar Auto: EN CURSO" : "☀️ Ciclo Solar Auto: PAUSADO";
+      }
       btnCiclo.background = activo ? "#e8a317" : "rgba(232, 163, 23, 0.25)";
       btnCiclo.color = activo ? "#0f172a" : "#2a3417";
+    };
+    this._onSyncCicloSolar = aplicarEstiloCiclo;
+    btnCiclo.onPointerUpObservable.add(() => {
+      const activo = cb.onToggleCicloSolar();
+      aplicarEstiloCiclo(activo);
     });
     modeGrid.addControl(btnCiclo, 0, 0);
 

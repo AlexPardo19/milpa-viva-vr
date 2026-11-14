@@ -1,36 +1,16 @@
-/**
- * Paisaje exterior (fuera de la parcela jugable): montañas low-poly con bosque,
- * nieve en las cumbres, colinas suaves, pinos, flores silvestres, pasto alto y rocas.
- *
- * Las montañas se generan proceduralmente (anillos con ruido determinista) y la
- * nieve usa exactamente los mismos anillos que el cuerpo, por lo que encaja sin huecos.
- */
-
 import {
-  Scene,
+  Color3,
+  Material,
   Mesh,
   MeshBuilder,
-  StandardMaterial,
-  Color3,
+  PBRMaterial,
+  Scene,
+  ShadowGenerator,
+  TransformNode,
   Vector3,
   VertexData,
-  TransformNode,
 } from "@babylonjs/core";
-import { crearTexRuidoSueloPixel } from "../ui/texturas_pixel_3d";
-
-function rnd(n: number): number {
-  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-  return x - Math.floor(x);
-}
-
-function mezcla(a: number[], b: number[], t: number): number[] {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-}
-
-function hex(h: string): number[] {
-  const c = Color3.FromHexString(h);
-  return [c.r, c.g, c.b];
-}
+import { crearMaterialPatrixPBR } from "../ui/texturas_patrix_pbr";
 
 interface OpcionesPico {
   radio: number;
@@ -40,19 +20,61 @@ interface OpcionesPico {
   semilla: number;
   perfil: "pico" | "domo";
   rugosidad: number;
-  /** nivel desde el cual se genera solo la capa de nieve (null = cuerpo completo) */
   nieveDesde: number | null;
-  colorBase: string[]; // de abajo hacia arriba (interpolado)
-  neblina: number; // 0..1 mezcla con azul atmosférico
+  colorBase: string[];
+  neblina: number;
+}
+
+function rnd(n: number): number {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
+function hex(h: string): Color3 {
+  return Color3.FromHexString(h);
+}
+
+function construirMallaMataExterior(scene: Scene, nombre: string): Mesh {
+  const posiciones: number[] = [];
+  const normales: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const angulos = [0, (2 * Math.PI) / 3];
+  const ancho = 0.56;
+  const alto = 0.52;
+
+  angulos.forEach((ang, idx) => {
+    const dx = Math.cos(ang) * ancho * 0.5;
+    const dz = Math.sin(ang) * ancho * 0.5;
+    const base = idx * 4;
+    posiciones.push(-dx, 0, -dz, dx, 0, dz, dx, alto, dz, -dx, alto, -dz);
+    for (let k = 0; k < 4; k++) normales.push(0, 1, 0);
+    uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  });
+
+  const m = new Mesh(nombre, scene);
+  const vd = new VertexData();
+  vd.positions = posiciones;
+  vd.normals = normales;
+  vd.uvs = uvs;
+  vd.indices = indices;
+  vd.applyToMesh(m);
+  return m;
 }
 
 function construirPico(scene: Scene, nombre: string, o: OpcionesPico): Mesh {
   const { tess: T, niveles: L } = o;
   const posiciones: number[] = [];
   const colores: number[] = [];
+  const uvs: number[] = [];
   const indices: number[] = [];
   const paleta = o.colorBase.map(hex);
-  const azulAtmos = hex("#9cc3e6");
+  const azulAtmos = hex("#9bb7d4");
   const escalaNieve = o.nieveDesde !== null ? 1.018 : 1.0;
   const lInicio = o.nieveDesde !== null ? o.nieveDesde : 0;
 
@@ -63,28 +85,37 @@ function construirPico(scene: Scene, nombre: string, o: OpcionesPico): Mesh {
     for (let i = 0; i < T; i++) {
       const ang = (i / T) * Math.PI * 2;
       const ruido = rnd(o.semilla * 31 + i * 7.3 + l * 3.1);
-      const cresta = 1 + o.rugosidad * (0.55 * Math.sin(ang * 3 + o.semilla) + 0.45 * Math.sin(ang * 5 + o.semilla * 2.1));
-      const r = l === L ? 0 : o.radio * base * cresta * (1 + (ruido - 0.5) * o.rugosidad * 0.7);
+      const cresta =
+        1 +
+        o.rugosidad *
+          (0.55 * Math.sin(ang * 3 + o.semilla) + 0.45 * Math.sin(ang * 5 + o.semilla * 2.1));
+      const r =
+        l === L ? 0 : o.radio * base * cresta * (1 + (ruido - 0.5) * o.rugosidad * 0.7);
       const angJ = ang + (rnd(o.semilla * 17 + i + l * 5) - 0.5) * 0.18;
-      const yJ = t * o.alto + (l > 0 && l < L ? (rnd(o.semilla * 13 + i * 2 + l) - 0.5) * o.alto * 0.05 : 0);
-      anillo.push(Math.cos(angJ) * r * escalaNieve, yJ * (o.nieveDesde !== null ? 1.004 : 1), Math.sin(angJ) * r * escalaNieve);
+      const yJ =
+        t * o.alto +
+        (l > 0 && l < L ? (rnd(o.semilla * 13 + i * 2 + l) - 0.5) * o.alto * 0.05 : 0);
+
+      posiciones.push(Math.cos(angJ) * r * escalaNieve, yJ, Math.sin(angJ) * r * escalaNieve);
+      uvs.push((i / T) * 4, t * 3);
+
       if (o.nieveDesde === null) {
-        // Color por altura: bosque → roca → roca clara
         const k = Math.min(paleta.length - 1, t * (paleta.length - 1));
         const i0 = Math.floor(k);
         const i1 = Math.min(paleta.length - 1, i0 + 1);
-        let c = mezcla(paleta[i0], paleta[i1], k - i0);
+        const f = k - i0;
         const var_ = 0.88 + rnd(o.semilla * 5 + i * 1.7 + l * 9.1) * 0.24;
-        c = [c[0] * var_, c[1] * var_, c[2] * var_];
-        c = mezcla(c, azulAtmos, o.neblina);
-        colores.push(c[0], c[1], c[2], 1);
+        const c = Color3.Lerp(paleta[i0], paleta[i1], f).scale(var_);
+        const cf = Color3.Lerp(c, azulAtmos, o.neblina * (0.65 - 0.45 * t));
+        colores.push(clamp01(cf.r), clamp01(cf.g), clamp01(cf.b), 1);
       }
+      if (l === L) break;
     }
+    anillo.push(l);
   }
-  for (let k = 0; k < anillo.length; k += 3) posiciones.push(anillo[k], anillo[k + 1], anillo[k + 2]);
 
   const filas = L - lInicio + 1;
-  for (let f = 0; f < filas - 1; f++) {
+  for (let f = 0; f < filas - 2; f++) {
     for (let i = 0; i < T; i++) {
       const a = f * T + i;
       const b = f * T + ((i + 1) % T);
@@ -93,50 +124,61 @@ function construirPico(scene: Scene, nombre: string, o: OpcionesPico): Mesh {
       indices.push(a, c, b, b, c, d);
     }
   }
-  // Tapa base para el cuerpo (evita ver el vacío si la cámara queda baja)
-  if (o.nieveDesde === null) {
-    const centro = posiciones.length / 3;
-    posiciones.push(0, 0, 0);
-    colores.push(0.2, 0.2, 0.2, 1);
-    for (let i = 0; i < T; i++) indices.push(centro, i, (i + 1) % T);
+  if (anillo.length >= 2) {
+    const fUlt = filas - 2;
+    const centro = posiciones.length / 3 - 1;
+    for (let i = 0; i < T; i++) {
+      const a = fUlt * T + i;
+      const b = fUlt * T + ((i + 1) % T);
+      indices.push(a, centro, b);
+    }
   }
 
   const m = new Mesh(nombre, scene);
   const vd = new VertexData();
   vd.positions = posiciones;
   vd.indices = indices;
+  vd.uvs = uvs;
   const normales: number[] = [];
   VertexData.ComputeNormals(posiciones, indices, normales);
   vd.normals = normales;
   if (o.nieveDesde === null) vd.colors = colores;
-  const uvs: number[] = [];
-  for (let k = 0; k < posiciones.length; k += 3) {
-    uvs.push((posiciones[k] + posiciones[k + 2]) * 0.12, posiciones[k + 1] * 0.12);
-  }
-  vd.uvs = uvs;
   vd.applyToMesh(m);
   m.convertToFlatShadedMesh();
   m.isPickable = false;
-  m.useVertexColors = o.nieveDesde === null;
   return m;
 }
 
+/**
+ * Paisaje alpino exterior estilo Patrix + Shader:
+ * - Cordilleras con mapa normal rocoso PBR y cumbres nevadas.
+ * - Colinas de pradera oliva y bosque de abetos con texturas de agujas alfa-cutout.
+ * - Matas silvestres en planos cruzados y rocas musgosas.
+ */
 export class PaisajeExterior {
   public readonly root: TransformNode;
-  public readonly matNieve: StandardMaterial;
+  public readonly matNieve: Material;
   public readonly meshesMontana: Mesh[] = [];
-  private readonly matVertex: StandardMaterial;
-  private readonly matCache = new Map<string, StandardMaterial>();
+  private readonly matVertex: PBRMaterial;
+  private readonly matCache = new Map<string, PBRMaterial>();
 
-  constructor(private readonly scene: Scene, matNieve: StandardMaterial) {
-    this.root = new TransformNode("paisajeExteriorRoot", scene);
+  constructor(
+    private readonly scene: Scene,
+    matNieve: Material,
+    private readonly shadowGen: ShadowGenerator | null = null
+  ) {
+    this.root = new TransformNode("paisajeExterior", scene);
     this.matNieve = matNieve;
 
-    this.matVertex = new StandardMaterial("matMontanaVertex", scene);
-    this.matVertex.diffuseColor = new Color3(1, 1, 1);
-    this.matVertex.diffuseTexture = crearTexRuidoSueloPixel(scene);
-    this.matVertex.emissiveColor = new Color3(0.30, 0.30, 0.30);
-    this.matVertex.specularColor = Color3.Black();
+    // PBR rocoso con vertex colors multiplicados sobre detalle mineral
+    this.matVertex = crearMaterialPatrixPBR(scene, "piedra_montana", {
+      nombre: "patrixMontanaVertexPBR",
+      uScale: 4,
+      vScale: 4,
+      usarPOM: false,
+      albedoColor: Color3.White(),
+    });
+    this.matVertex.roughness = 0.92;
 
     this.construirMontanas();
     this.construirColinas();
@@ -144,27 +186,26 @@ export class PaisajeExterior {
     this.construirFloresPastoYRocas();
   }
 
-  private mat(h: string, em = 0.3): StandardMaterial {
-    const k = `${h}_${em}`;
+  private matSimple(h: string, roughness = 0.85): PBRMaterial {
+    const k = `${h}_${roughness.toFixed(2)}`;
     let m = this.matCache.get(k);
     if (!m) {
-      m = new StandardMaterial(`matPaisaje_${k}`, this.scene);
-      const c = Color3.FromHexString(h);
-      m.diffuseColor = c;
-      m.emissiveColor = c.scale(em);
-      m.specularColor = Color3.Black();
+      m = new PBRMaterial(`matPaisajePBR_${k}`, this.scene);
+      m.albedoColor = Color3.FromHexString(h);
+      m.metallic = 0;
+      m.roughness = roughness;
       this.matCache.set(k, m);
     }
     return m;
   }
 
   private construirMontanas(): void {
-    const coloresMontana = ["#3f7d36", "#4f8a3a", "#7a6a50", "#8b8478", "#a8a39a"];
+    const coloresMontana = ["#6e9146", "#819f54", "#98968e", "#b5b3ad", "#d7d8d5"];
     let idx = 0;
 
     const anillos = [
-      { n: 11, rMin: 82, rMax: 100, hMin: 24, hMax: 40, radioK: 0.95, neblina: 0.10 },
-      { n: 14, rMin: 125, rMax: 150, hMin: 42, hMax: 68, radioK: 0.95, neblina: 0.38 },
+      { n: 12, rMin: 84, rMax: 106, hMin: 24, hMax: 38, radioK: 0.68, neblina: 0.16 },
+      { n: 15, rMin: 132, rMax: 165, hMin: 42, hMax: 66, radioK: 0.72, neblina: 0.34 },
     ];
     anillos.forEach((a, ai) => {
       for (let i = 0; i < a.n; i++) {
@@ -172,42 +213,58 @@ export class PaisajeExterior {
         const ang = (i / a.n) * Math.PI * 2 + (rnd(sem) - 0.5) * 0.22 + ai * 0.2;
         const r = a.rMin + rnd(sem * 2) * (a.rMax - a.rMin);
         const alto = a.hMin + rnd(sem * 3) * (a.hMax - a.hMin);
-        const radio = alto * (1.15 + rnd(sem * 4) * 0.6) * a.radioK;
+        const radio = alto * (0.95 + rnd(sem * 4) * 0.42) * a.radioK;
         const x = Math.cos(ang) * r;
         const z = Math.sin(ang) * r;
 
         const opciones: OpcionesPico = {
-          radio, alto, tess: 9, niveles: 8, semilla: sem, perfil: "pico",
-          rugosidad: 0.32, nieveDesde: null, colorBase: coloresMontana, neblina: a.neblina,
+          radio,
+          alto,
+          tess: 12,
+          niveles: 7,
+          semilla: sem,
+          perfil: "pico",
+          rugosidad: 0.34,
+          nieveDesde: null,
+          colorBase: coloresMontana,
+          neblina: a.neblina,
         };
         const cuerpo = construirPico(this.scene, `montana_${idx}`, opciones);
         cuerpo.position.set(x, -1.2, z);
         cuerpo.material = this.matVertex;
         cuerpo.parent = this.root;
+        cuerpo.receiveShadows = true;
         cuerpo.freezeWorldMatrix();
         this.meshesMontana.push(cuerpo);
 
         if (alto > 30) {
           const nieve = construirPico(this.scene, `montanaNieve_${idx}`, {
-            ...opciones, nieveDesde: 5,
+            ...opciones,
+            nieveDesde: 5,
           });
           nieve.position.copyFrom(cuerpo.position);
           nieve.material = this.matNieve;
           nieve.parent = this.root;
+          nieve.receiveShadows = true;
           nieve.freezeWorldMatrix();
           this.meshesMontana.push(nieve);
         }
-        // Picos secundarios (hombros) para silueta menos simétrica
+
         if (rnd(sem * 9) > 0.35) {
           const lado = rnd(sem * 11) > 0.5 ? 1 : -1;
           const hombro = construirPico(this.scene, `montanaHombro_${idx}`, {
             ...opciones,
             radio: radio * 0.62,
-            alto: alto * 0.62,
+            alto: alto * (0.5 + rnd(sem * 13) * 0.18),
             semilla: sem + 50,
-            neblina: a.neblina,
+            tess: 9,
+            niveles: 5,
           });
-          hombro.position.set(x + lado * radio * 0.75, -1.2, z + (rnd(sem * 12) - 0.5) * radio * 0.6);
+          hombro.position.set(
+            x + lado * radio * 0.75,
+            -1.2,
+            z + (rnd(sem * 12) - 0.5) * radio * 0.6
+          );
           hombro.material = this.matVertex;
           hombro.parent = this.root;
           hombro.freezeWorldMatrix();
@@ -219,44 +276,92 @@ export class PaisajeExterior {
   }
 
   private construirColinas(): void {
-    const verdes = ["#4e9a2f", "#5fae38", "#78c04a"];
-    const defs = [
-      [-26, 20, 17, 3.2], [26, 18, 15, 3.6], [-27, -20, 16, 3.0], [27, -22, 19, 4.2],
-      [3, 30, 21, 2.8], [-22, 0, 11, 2.4], [38, 0, 16, 3.4], [-40, 8, 18, 3.8],
-      [-12, -34, 18, 3.4], [16, -36, 17, 3.0], [-36, 30, 16, 3.2], [38, 32, 17, 3.0],
+    const verdes = ["#86aa54", "#96b860", "#a6c66d"];
+    const defs: Array<[number, number, number, number]> = [
+      [-52, -42, 20, 5.2],
+      [48, -50, 22, 6.2],
+      [-56, 28, 21, 5.8],
+      [54, 30, 23, 6.4],
+      [-36, 56, 19, 4.8],
+      [38, 58, 21, 5.6],
+      [0, -64, 24, 6.8],
+      [-68, -8, 21, 5.4],
+      [68, -10, 22, 6.0],
     ];
     defs.forEach(([x, z, r, h], i) => {
       const m = construirPico(this.scene, `colinaSuave_${i}`, {
-        radio: r, alto: h, tess: 12, niveles: 4, semilla: 300 + i, perfil: "domo",
-        rugosidad: 0.10, nieveDesde: null, colorBase: [verdes[i % 3], verdes[(i + 1) % 3]], neblina: 0,
+        radio: r,
+        alto: h,
+        tess: 12,
+        niveles: 4,
+        semilla: 300 + i,
+        perfil: "domo",
+        rugosidad: 0.12,
+        nieveDesde: null,
+        colorBase: [verdes[i % 3], verdes[(i + 1) % 3]],
+        neblina: 0.04,
       });
       m.position.set(x, -0.32, z);
       m.material = this.matVertex;
+      m.receiveShadows = true;
       m.parent = this.root;
       m.freezeWorldMatrix();
     });
   }
 
   private zonaLibre(x: number, z: number): boolean {
-    if (Math.abs(x) < 11 && Math.abs(z) < 11) return false;           // parcela y zócalo
-    if (Math.abs(x) < 2.2 && z > 8) return false;                       // camino principal
-    if (x > -1 && x < 14 && z > 14 && z < 17.2) return false;           // camino lateral
-    if (Math.hypot(x - 14.5, z + 7.5) < 4.5) return false;              // estanque
-    if (Math.hypot(x - 14.2, z - 10.8) < 4) return false;               // molino
-    if (Math.abs(x + 14.2) < 4.5 && Math.abs(z - 3.5) < 5.5) return false; // corral izq
-    if (Math.abs(x - 13.8) < 4 && Math.abs(z - 2) < 5) return false;     // corral der
+    if (Math.abs(x) < 11 && Math.abs(z) < 11) return false;
+    if (Math.abs(x) < 2.2 && z > 8) return false;
+    if (x > -1 && x < 14 && z > 14 && z < 17.2) return false;
+    if (Math.hypot(x - 14.5, z + 7.5) < 4.5) return false;
+    if (Math.hypot(x - 14.2, z - 10.8) < 4) return false;
+    if (Math.abs(x + 14.2) < 4.5 && Math.abs(z - 3.5) < 5.5) return false;
+    if (Math.abs(x - 13.8) < 4 && Math.abs(z - 2) < 5) return false;
     return true;
   }
 
   private construirBosqueDePinos(): void {
-    const matTronco = this.mat("#5b3a1c", 0.2);
-    const matPino1 = this.mat("#1f6b34", 0.28);
-    const matPino2 = this.mat("#2a8040", 0.28);
+    const matTronco = crearMaterialPatrixPBR(this.scene, "tronco_corteza", {
+      nombre: "patrixPinoTronco",
+      uScale: 1,
+      vScale: 2,
+      cacheable: true,
+    });
+    const matPino1 = crearMaterialPatrixPBR(this.scene, "pino_agujas", {
+      nombre: "patrixPinoAgujas1",
+      uScale: 2,
+      vScale: 1,
+      usarPOM: false,
+      albedoColor: new Color3(0.95, 1.0, 0.92),
+    });
+    const matPino2 = crearMaterialPatrixPBR(this.scene, "pino_agujas", {
+      nombre: "patrixPinoAgujas2",
+      uScale: 2,
+      vScale: 1,
+      usarPOM: false,
+      albedoColor: new Color3(1.04, 1.06, 0.92),
+    });
 
-    const tronco = MeshBuilder.CreateCylinder("pinoTroncoM", { diameter: 0.4, height: 1.3, tessellation: 6 }, this.scene);
-    const cono1 = MeshBuilder.CreateCylinder("pinoCono1M", { diameterTop: 0, diameterBottom: 2.6, height: 2.6, tessellation: 7 }, this.scene);
-    const cono2 = MeshBuilder.CreateCylinder("pinoCono2M", { diameterTop: 0, diameterBottom: 1.9, height: 2.2, tessellation: 7 }, this.scene);
-    const cono3 = MeshBuilder.CreateCylinder("pinoCono3M", { diameterTop: 0, diameterBottom: 1.2, height: 1.7, tessellation: 7 }, this.scene);
+    const tronco = MeshBuilder.CreateCylinder(
+      "pinoTroncoM",
+      { diameter: 0.42, height: 1.4, tessellation: 6 },
+      this.scene
+    );
+    const cono1 = MeshBuilder.CreateCylinder(
+      "pinoCono1M",
+      { diameterTop: 0.1, diameterBottom: 2.7, height: 2.6, tessellation: 8 },
+      this.scene
+    );
+    const cono2 = MeshBuilder.CreateCylinder(
+      "pinoCono2M",
+      { diameterTop: 0.08, diameterBottom: 2.0, height: 2.2, tessellation: 8 },
+      this.scene
+    );
+    const cono3 = MeshBuilder.CreateCylinder(
+      "pinoCono3M",
+      { diameterTop: 0, diameterBottom: 1.25, height: 1.75, tessellation: 8 },
+      this.scene
+    );
     tronco.material = matTronco;
     cono1.material = matPino1;
     cono2.material = matPino2;
@@ -264,140 +369,167 @@ export class PaisajeExterior {
     [tronco, cono1, cono2, cono3].forEach((m) => {
       m.isVisible = false;
       m.isPickable = false;
-      m.convertToFlatShadedMesh();
     });
 
     let colocados = 0;
-    for (let i = 0; i < 700 && colocados < 190; i++) {
-      // Concentrar pinos en la franja de las faldas (r 34-70), con claros
+    for (let i = 0; i < 320 && colocados < 130; i++) {
       const ang = rnd(i * 3.7) * Math.PI * 2;
-      const r = 30 + rnd(i * 5.3) * 42;
+      const r = 24 + rnd(i * 5.3) * 48;
       const x = Math.cos(ang) * r;
       const z = Math.sin(ang) * r;
-      // Agrupar en manchones: ruido de baja frecuencia
-      const manchon = Math.sin(x * 0.11) * Math.cos(z * 0.09) + Math.sin((x + z) * 0.05);
-      if (manchon < 0.25) continue;
       if (!this.zonaLibre(x, z)) continue;
-      const esc = 0.8 + rnd(i * 7.9) * 1.1;
+      const manchon = Math.sin(x * 0.11) * Math.cos(z * 0.09) + Math.sin((x + z) * 0.05);
+      if (manchon < -0.2) continue;
+
+      const esc = 0.85 + rnd(i * 7.9) * 1.15;
       const y0 = -0.30;
-      const mk = (m: Mesh, nom: string, y: number) => {
+      const rotY = rnd(i * 9.3) * Math.PI * 2;
+      const mk = (m: Mesh, nom: string, y: number, sombreado = false) => {
         const inst = m.createInstance(`${nom}_${colocados}`);
         inst.position.set(x, y0 + y * esc, z);
         inst.scaling.setAll(esc);
-        inst.isPickable = false;
+        inst.rotation.y = rotY;
         inst.parent = this.root;
+        inst.isPickable = false;
         inst.freezeWorldMatrix();
+        if (sombreado && r < 42 && this.shadowGen) {
+          this.shadowGen.addShadowCaster(inst);
+        }
       };
-      mk(tronco, "pinoTr", 0.65);
-      mk(cono1, "pinoC1", 2.2);
-      mk(cono2, "pinoC2", 3.7);
-      mk(cono3, "pinoC3", 5.0);
+      mk(tronco, "pTr", 0.65);
+      mk(cono1, "pC1", 2.35, true);
+      mk(cono2, "pC2", 3.65, true);
+      mk(cono3, "pC3", 4.75);
       colocados++;
     }
   }
 
   private construirFloresPastoYRocas(): void {
-    const coloresFlor = ["#fde047", "#f472b6", "#ffffff", "#c084fc", "#fb7185", "#fb923c"];
+    // Flores campestres sutiles (amarillo pálido, blanco crema, ocre cálido)
+    const coloresFlor = ["#f3e08b", "#f4f1e6", "#eab308", "#e8c588", "#e59866"];
     const floresMaster = coloresFlor.map((c, i) => {
-      const m = MeshBuilder.CreateBox(`florM_${i}`, { width: 0.14, height: 0.14, depth: 0.14 }, this.scene);
-      m.material = this.mat(c, 0.6);
+      const m = MeshBuilder.CreateBox(`florM_${i}`, { width: 0.11, height: 0.09, depth: 0.11 }, this.scene);
+      m.material = this.matSimple(c, 0.72);
       m.isVisible = false;
       m.isPickable = false;
       return m;
     });
-    const tallo = MeshBuilder.CreateBox("florTalloM", { width: 0.04, height: 0.34, depth: 0.04 }, this.scene);
-    tallo.material = this.mat("#3f8f2a", 0.3);
+    const tallo = MeshBuilder.CreateBox("florTalloM", { width: 0.03, height: 0.28, depth: 0.03 }, this.scene);
+    tallo.material = this.matSimple("#4c6e2c", 0.78);
     tallo.isVisible = false;
     tallo.isPickable = false;
 
-    const pastoMasters = ["#3f8f2a", "#52a636", "#2f7a22"].map((c, i) => {
-      const m = MeshBuilder.CreateBox(`pastoAltoM_${i}`, { width: 0.10, height: 0.5, depth: 0.10 }, this.scene);
-      m.material = this.mat(c, 0.3);
-      m.isVisible = false;
-      m.isPickable = false;
-      return m;
+    const matTuft = crearMaterialPatrixPBR(this.scene, "pasto_tuft", {
+      nombre: "patrixExtPastoTuft",
+      usarPOM: false,
     });
+    const pastoMaster = construirMallaMataExterior(this.scene, "pastoAltoExtM");
+    pastoMaster.material = matTuft;
+    pastoMaster.isVisible = false;
+    pastoMaster.isPickable = false;
 
     let nf = 0;
     let np = 0;
-    for (let i = 0; i < 1500 && (nf < 260 || np < 420); i++) {
+    for (let i = 0; i < 620 && np < 260; i++) {
       const ang = rnd(i * 2.9 + 1) * Math.PI * 2;
-      const r = 11.5 + Math.pow(rnd(i * 4.1 + 2), 1.5) * 55;
+      const r = 11.2 + Math.pow(rnd(i * 4.1 + 2), 1.4) * 52;
       const x = Math.cos(ang) * r;
       const z = Math.sin(ang) * r;
       if (!this.zonaLibre(x, z)) continue;
+
       const t = rnd(i * 6.7);
-      if (t < 0.38 && nf < 260) {
-        // Florcita: tallo + capullo, agrupadas en parches
+      if (t < 0.28 && nf < 110) {
         const parche = Math.sin(x * 0.35) * Math.sin(z * 0.31);
-        if (parche < -0.15) continue;
-        const h = 0.7 + rnd(i * 8.1) * 0.8;
+        if (parche < 0.05) continue;
+        const h = 0.7 + rnd(i * 8.1) * 0.65;
         const tl = tallo.createInstance(`florTallo_${nf}`);
-        tl.position.set(x, -0.30 + 0.17 * h, z);
+        tl.position.set(x, -0.30 + 0.14 * h, z);
         tl.scaling.y = h;
-        tl.isPickable = false;
         tl.parent = this.root;
+        tl.isPickable = false;
         tl.freezeWorldMatrix();
+
         const f = floresMaster[Math.floor(rnd(i * 3.3) * floresMaster.length)].createInstance(`flor_${nf}`);
-        f.position.set(x, -0.30 + 0.34 * h + 0.05, z);
-        f.rotation.y = rnd(i) * 3;
-        f.isPickable = false;
+        f.position.set(x, -0.30 + 0.28 * h + 0.04, z);
+        f.rotation.y = rnd(i) * Math.PI;
         f.parent = this.root;
+        f.isPickable = false;
         f.freezeWorldMatrix();
         nf++;
-      } else if (np < 420) {
-        const p = pastoMasters[i % 3].createInstance(`pastoAlto_${np}`);
-        const h = 0.6 + rnd(i * 5.5) * 1.1;
-        p.position.set(x, -0.30 + 0.25 * h, z);
-        p.scaling.set(1 + rnd(i) * 0.8, h, 1 + rnd(i + 1) * 0.8);
-        p.rotation.y = rnd(i * 2.2) * 3;
-        p.isPickable = false;
+      } else {
+        const p = pastoMaster.createInstance(`pastoAlto_${np}`);
+        const h = 0.65 + rnd(i * 5.5) * 0.95;
+        p.position.set(x, -0.30, z);
+        p.scaling.set(0.85 + rnd(i * 3.1) * 0.55, h, 0.85 + rnd(i * 3.1) * 0.55);
+        p.rotation.y = rnd(i * 2.2) * Math.PI * 2;
         p.parent = this.root;
+        p.isPickable = false;
         p.freezeWorldMatrix();
         np++;
       }
     }
 
-    // Rocas grises dispersas
-    const matRoca = this.mat("#8a8f98", 0.28);
-    const matRoca2 = this.mat("#6b7280", 0.28);
+    // Rocas exteriores con textura mineral PBR musgosa
+    const matRoca1 = crearMaterialPatrixPBR(this.scene, "piedra_cobble", {
+      nombre: "patrixExtRoca1",
+      uScale: 1,
+      vScale: 1,
+      cacheable: true,
+    });
+    const matRoca2 = crearMaterialPatrixPBR(this.scene, "piedra_montana", {
+      nombre: "patrixExtRoca2",
+      uScale: 1,
+      vScale: 1,
+      cacheable: true,
+    });
+
     let nr = 0;
-    for (let i = 0; i < 200 && nr < 38; i++) {
+    for (let i = 0; i < 85 && nr < 48; i++) {
       const ang = rnd(i * 8.8 + 4) * Math.PI * 2;
-      const r = 13 + rnd(i * 1.9 + 3) * 55;
+      const r = 16 + rnd(i * 1.9 + 3) * 48;
       const x = Math.cos(ang) * r;
       const z = Math.sin(ang) * r;
       if (!this.zonaLibre(x, z)) continue;
-      const s = 0.4 + rnd(i * 2.7) * 1.1;
+      const s = 0.35 + rnd(i * 2.7) * 0.65;
       const roca = MeshBuilder.CreatePolyhedron(`rocaExt_${nr}`, { type: 1, size: s }, this.scene);
       roca.position.set(x, -0.30 + s * 0.35, z);
-      roca.scaling.set(1.2, 0.7, 1);
-      roca.rotation.y = rnd(i) * 6;
-      roca.material = nr % 2 ? matRoca : matRoca2;
-      roca.isPickable = false;
+      roca.scaling.set(1.2, 0.62, 0.95);
+      roca.rotation.set(rnd(i) * 0.5, rnd(i * 2) * Math.PI, rnd(i * 3) * 0.4);
+      roca.material = nr % 2 === 0 ? matRoca1 : matRoca2;
       roca.parent = this.root;
+      roca.receiveShadows = true;
+      roca.isPickable = false;
       roca.freezeWorldMatrix();
       nr++;
     }
 
-    // Arbustos redondeados
-    const matArbusto = this.mat("#3f9a35", 0.3);
+    // Arbustos follaje alfa-cutout Patrix
+    const matArbusto = crearMaterialPatrixPBR(this.scene, "follaje_roble", {
+      nombre: "patrixExtArbusto",
+      uScale: 1,
+      vScale: 1,
+      usarPOM: false,
+      cacheable: true,
+    });
     let na = 0;
-    for (let i = 0; i < 200 && na < 36; i++) {
+    for (let i = 0; i < 75 && na < 38; i++) {
       const ang = rnd(i * 9.1 + 7) * Math.PI * 2;
       const r = 12.5 + rnd(i * 2.4 + 5) * 40;
       const x = Math.cos(ang) * r;
       const z = Math.sin(ang) * r;
       if (!this.zonaLibre(x, z)) continue;
-      const s = 0.7 + rnd(i * 3.1) * 0.7;
-      const b = MeshBuilder.CreateSphere(`arbusto_${na}`, { diameter: s, segments: 4 }, this.scene);
-      b.position.set(x, -0.30 + s * 0.3, z);
-      b.scaling.y = 0.75;
+      const s = 0.72 + rnd(i * 3.1) * 0.68;
+      const b = MeshBuilder.CreateBox(`arbusto_${na}`, { width: s * 1.25, height: s * 0.85, depth: s * 1.15 }, this.scene);
+      b.position.set(x, -0.30 + s * 0.34, z);
+      b.rotation.y = rnd(i * 4.7) * Math.PI;
       b.material = matArbusto;
-      b.isPickable = false;
       b.parent = this.root;
-      b.convertToFlatShadedMesh();
+      b.receiveShadows = true;
+      b.isPickable = false;
       b.freezeWorldMatrix();
+      if (r < 26 && this.shadowGen) {
+        this.shadowGen.addShadowCaster(b);
+      }
       na++;
     }
   }

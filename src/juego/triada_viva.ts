@@ -58,47 +58,47 @@ export class TriadaViva {
     private construirVisualesNodos(): void {
         const matGuiaFrijol = new StandardMaterial('matGuiaFrijol', this.scene);
         matGuiaFrijol.diffuseColor = Color3.FromHexString('#387a3b');
-        matGuiaFrijol.emissiveColor = Color3.FromHexString('#255827').scale(0.18);
+        matGuiaFrijol.emissiveColor = Color3.FromHexString('#255827').scale(0.02);
         matGuiaFrijol.specularColor = new Color3(0.06, 0.08, 0.05);
 
         const matHojaFrijol = new StandardMaterial('matHojaFrijol', this.scene);
         matHojaFrijol.diffuseColor = Color3.FromHexString('#439246');
-        matHojaFrijol.emissiveColor = Color3.FromHexString('#295f2b').scale(0.18);
+        matHojaFrijol.emissiveColor = Color3.FromHexString('#295f2b').scale(0.02);
         matHojaFrijol.specularColor = new Color3(0.05, 0.07, 0.04);
 
         const matVaina = new StandardMaterial('matVainaFrijol', this.scene);
         matVaina.diffuseColor = Color3.FromHexString('#689f38');
-        matVaina.emissiveColor = Color3.FromHexString('#4b7824').scale(0.18);
+        matVaina.emissiveColor = Color3.FromHexString('#4b7824').scale(0.02);
         matVaina.specularColor = new Color3(0.08, 0.1, 0.06);
 
         const matFlorFrijol = new StandardMaterial('matFlorFrijol', this.scene);
         matFlorFrijol.diffuseColor = Color3.FromHexString('#f5f3ff');
-        matFlorFrijol.emissiveColor = Color3.FromHexString('#ddd6fe').scale(0.22);
+        matFlorFrijol.emissiveColor = Color3.FromHexString('#ddd6fe').scale(0.03);
         matFlorFrijol.specularColor = Color3.Black();
 
         const matGuiaCalabaza = new StandardMaterial('matGuiaCalabaza', this.scene);
         matGuiaCalabaza.diffuseColor = Color3.FromHexString('#3b7a36');
-        matGuiaCalabaza.emissiveColor = Color3.FromHexString('#244f21').scale(0.18);
+        matGuiaCalabaza.emissiveColor = Color3.FromHexString('#244f21').scale(0.02);
         matGuiaCalabaza.specularColor = new Color3(0.05, 0.07, 0.04);
 
         const matHojaCalabaza = new StandardMaterial('matHojaCalabaza', this.scene);
         matHojaCalabaza.diffuseColor = Color3.FromHexString('#2e6f32');
-        matHojaCalabaza.emissiveColor = Color3.FromHexString('#1d4b20').scale(0.18);
+        matHojaCalabaza.emissiveColor = Color3.FromHexString('#1d4b20').scale(0.02);
         matHojaCalabaza.specularColor = new Color3(0.06, 0.08, 0.05);
 
         const matFlorCalabaza = new StandardMaterial('matFlorCalabaza', this.scene);
         matFlorCalabaza.diffuseColor = Color3.FromHexString('#f59e0b');
-        matFlorCalabaza.emissiveColor = Color3.FromHexString('#d97706').scale(0.22);
+        matFlorCalabaza.emissiveColor = Color3.FromHexString('#d97706').scale(0.03);
         matFlorCalabaza.specularColor = Color3.Black();
 
         const matFrutoCalabaza = new StandardMaterial('matFrutoCalabaza', this.scene);
         matFrutoCalabaza.diffuseColor = Color3.FromHexString('#d97706');
-        matFrutoCalabaza.emissiveColor = Color3.FromHexString('#92400e').scale(0.18);
+        matFrutoCalabaza.emissiveColor = Color3.FromHexString('#92400e').scale(0.02);
         matFrutoCalabaza.specularColor = new Color3(0.08, 0.06, 0.04);
 
         const matPedunculo = new StandardMaterial('matPedunculoCalabaza', this.scene);
         matPedunculo.diffuseColor = Color3.FromHexString('#5c4d26');
-        matPedunculo.emissiveColor = Color3.FromHexString('#3b3117').scale(0.18);
+        matPedunculo.emissiveColor = Color3.FromHexString('#3b3117').scale(0.02);
 
         for (let i = 0; i < this.surco.nodos.length; i++) {
             const nodo = this.surco.nodos[i];
