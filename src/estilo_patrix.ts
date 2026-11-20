@@ -8,6 +8,7 @@ import {
   ImageProcessingConfiguration,
   InstancedMesh,
   Mesh,
+  MeshBuilder,
   Nullable,
   PBRMaterial,
   ReflectionProbe,
@@ -16,6 +17,8 @@ import {
   ShadowGenerator,
   StandardMaterial,
   Texture,
+  TransformNode,
+  Vector3,
   DefaultRenderingPipeline,
   SSAO2RenderingPipeline,
   Constants,
@@ -112,7 +115,7 @@ export function aplicarEstiloPatrix(
   ip.isEnabled = true;
   ip.toneMappingEnabled = true;
   ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
-  ip.exposure = 1.18;
+  ip.exposure = 1.12;
   ip.contrast = 1.14;
   ip.vignetteEnabled = true;
   ip.vignetteWeight = 0.95;
@@ -383,19 +386,16 @@ export function aplicarEstiloPatrix(
       const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
       const lerp = (a: number, b: number, t: number) => a + (b - a) * clamp01(t);
 
-      // Exposición y contraste calibrados para día luminoso, atardecer cálido y noche estrellada legible
-      const expBase = lerp(lerp(1.10, 1.05, wDia), 1.24, wNoche) + wCrepusculo * 0.06;
-      ip.exposure = Math.max(0.92, expBase - factorNub * 0.06);
-      ip.contrast = lerp(1.15, 1.10, wNoche) + wCrepusculo * 0.05 - factorNub * 0.06;
-
-      // Curvas cromáticas dinámicas (luces doradas/rosadas en ocaso, azul plata en noche)
+      // Exposición/contraste de ImageProcessing se mantienen fijos para evitar
+      // _updateParameters() -> _markAllSubMeshesAsImageProcessingDirty() cada frame al amanecer/atardecer;
+      // las curvas cromáticas y el IBL sí se actualizan por uniforme sin recompilar materiales.
       const hiHueDia = 40;
       const hiHueCrep = esAtardecer ? 22 : 338;
       const hiHueNoche = 216;
       const hiHueBase = lerp(hiHueDia, hiHueCrep, clamp01(wCrepusculo * 1.15));
       curves.highlightsHue = lerp(hiHueBase, hiHueNoche, wNoche);
       curves.highlightsSaturation = lerp(14, 34, wCrepusculo) + wNoche * 8 - factorNub * 10;
-      curves.highlightsDensity = lerp(16, 26, wCrepusculo);
+      curves.highlightsDensity = lerp(16, 28, wCrepusculo) + wNoche * 4;
 
       const shHueBase = lerp(212, 246, wCrepusculo);
       curves.shadowsHue = lerp(shHueBase, 224, wNoche);
@@ -405,7 +405,7 @@ export function aplicarEstiloPatrix(
       curves.globalSaturation = lerp(12, 6, wNoche) + wCrepusculo * 8 - factorNub * 14;
 
       if (probeCielo) {
-        scene.environmentIntensity = lerp(lerp(0.74, 0.94, wDia), 0.42, wNoche) * (1 - factorNub * 0.18);
+        scene.environmentIntensity = lerp(lerp(0.76, 0.94, wDia), 0.48, wNoche) * (1 - factorNub * 0.18);
       }
       if (defaultPipeline) {
         defaultPipeline.bloomThreshold = lerp(0.84, 0.74, Math.max(wCrepusculo, wNoche));
@@ -426,4 +426,141 @@ export function aplicarEstiloPatrix(
       defaultPipeline?.dispose();
     },
   };
+}
+
+export interface SubHojaAnim {
+  mesh: Mesh;
+  baseRotX: number;
+  baseRotY: number;
+  baseRotZ: number;
+  pesoAleteo: number;
+  fase: number;
+}
+
+export interface CopaArbolAnim {
+  pivot: TransformNode;
+  fase: number;
+  escala: number;
+  hojas: SubHojaAnim[];
+}
+
+export interface FactoresVientoArbol {
+  w: number;
+  lean: number;
+  freqSway: number;
+  freqLeaf: number;
+}
+
+/** Calcula intensidad normalizada, inclinación constante y frecuencias de ráfaga según viento (m/s). */
+export function calcularFactoresVientoArbol(vientoMs: number): FactoresVientoArbol {
+  const v = Math.max(0, vientoMs);
+  if (v <= 0.02) {
+    return { w: 0, lean: 0, freqSway: 1.1, freqLeaf: 3.1 };
+  }
+  const w = Math.min(1.65, Math.pow(v / 14.0, 0.84) * 1.15);
+  return {
+    w,
+    lean: w * 0.088,
+    freqSway: 1.1 + v * 0.16,
+    freqLeaf: 3.1 + v * 0.56,
+  };
+}
+
+/**
+ * Añade racimos de planos cruzados con textura alfa-cutout de hojas alrededor de la copa
+ * para romper la silueta cúbica y permitir aleteo individual con el viento.
+ */
+export function poblarPlanosFoliaresCopa(
+  scene: Scene,
+  parent: TransformNode,
+  matHoja: PBRMaterial,
+  nombreBase: string,
+  centroY: number,
+  radioXZ: number,
+  altoCopa: number,
+  seed: number,
+  shadowGen: Nullable<ShadowGenerator> = null
+): SubHojaAnim[] {
+  const salida: SubHojaAnim[] = [];
+  const totalPlanos = 6;
+  for (let i = 0; i < totalPlanos; i++) {
+    const esCorona = i >= 4;
+    const ang = esCorona
+      ? (i - 4) * (Math.PI * 0.5) + seed * 0.4
+      : (i / 4) * Math.PI * 2 + seed * 0.55;
+    const dist = esCorona ? radioXZ * 0.18 : radioXZ * 0.78;
+    const py = esCorona
+      ? centroY + altoCopa * 0.42
+      : centroY + ((i % 2 === 0 ? 0.14 : -0.10) * altoCopa);
+    const w = esCorona ? radioXZ * 1.18 : radioXZ * 1.05;
+    const h = esCorona ? altoCopa * 0.88 : altoCopa * 0.96;
+
+    const p = MeshBuilder.CreatePlane(
+      `${nombreBase}_hojaPl_${i}`,
+      { width: w, height: h, sideOrientation: Mesh.DOUBLESIDE },
+      scene
+    );
+    p.position.copyFrom(new Vector3(Math.cos(ang) * dist, py, Math.sin(ang) * dist));
+    const baseRotX = esCorona ? 0.22 * (i === 4 ? 1 : -1) : 0.18 * (i % 2 === 0 ? 1 : -1);
+    const baseRotY = ang + Math.PI * 0.5 + (i % 2 === 0 ? 0.28 : -0.24);
+    const baseRotZ = esCorona ? 0.16 : 0.14 * (i % 3 === 0 ? -1 : 1);
+    p.rotation.set(baseRotX, baseRotY, baseRotZ);
+    p.material = matHoja;
+    p.parent = parent;
+    p.receiveShadows = true;
+    p.isPickable = false;
+    shadowGen?.addShadowCaster(p);
+
+    salida.push({
+      mesh: p,
+      baseRotX,
+      baseRotY,
+      baseRotZ,
+      pesoAleteo: esCorona ? 1.25 : 1.0 + (i % 3) * 0.15,
+      fase: seed * 1.7 + i * 1.37,
+    });
+  }
+  return salida;
+}
+
+/** Anima copas de árboles y aleteo desfasado de hojas en función de la velocidad del viento. */
+export function animarCopasArboles(
+  copas: readonly CopaArbolAnim[],
+  tiempo: number,
+  vientoMs: number
+): void {
+  const { w, lean, freqSway, freqLeaf } = calcularFactoresVientoArbol(vientoMs);
+  for (let i = 0; i < copas.length; i++) {
+    const copa = copas[i];
+    if (w === 0) {
+      copa.pivot.rotation.set(0, 0, 0);
+      for (let j = 0; j < copa.hojas.length; j++) {
+        const h = copa.hojas[j];
+        h.mesh.rotation.set(h.baseRotX, h.baseRotY, h.baseRotZ);
+      }
+      continue;
+    }
+
+    const damp = 1.0 / Math.max(0.85, Math.sqrt(copa.escala));
+    const gustX =
+      Math.sin(tiempo * freqSway + copa.fase) * 0.72 +
+      Math.sin(tiempo * (freqSway * 1.67) + copa.fase * 1.9) * 0.28;
+    const gustZ =
+      Math.cos(tiempo * (freqSway * 0.88) + copa.fase * 1.3) * 0.65 +
+      Math.sin(tiempo * (freqSway * 1.41) + copa.fase) * 0.35;
+
+    copa.pivot.rotation.z = -(lean + gustX * (0.015 + w * 0.075)) * damp;
+    copa.pivot.rotation.x = gustZ * (0.01 + w * 0.044) * damp;
+    copa.pivot.rotation.y = Math.sin(tiempo * (freqSway * 0.75) + copa.fase * 0.6) * (0.006 + w * 0.03) * damp;
+
+    for (let j = 0; j < copa.hojas.length; j++) {
+      const h = copa.hojas[j];
+      const amp = (0.012 + w * 0.072) * h.pesoAleteo;
+      const a1 = Math.sin(tiempo * freqLeaf + h.fase + copa.fase);
+      const a2 = Math.cos(tiempo * (freqLeaf * 1.37) + h.fase * 1.7);
+      h.mesh.rotation.z = h.baseRotZ - amp * 0.4 + a1 * amp;
+      h.mesh.rotation.x = h.baseRotX + a2 * amp * 0.78;
+      h.mesh.rotation.y = h.baseRotY + (a1 - a2) * amp * 0.45;
+    }
+  }
 }

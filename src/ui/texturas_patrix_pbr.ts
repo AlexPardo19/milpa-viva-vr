@@ -791,24 +791,35 @@ function genMetalForjadoPatrix(size = 128): PixelFields {
   return f;
 }
 
-function genFollajeRoblePatrix(size = 128): PixelFields {
+function genFollajeRoblePatrix(size = 256): PixelFields {
   const f = crearCampos(size);
   f.alpha = new Float32Array(size * size);
 
-  const shadowLeaf: [number, number, number] = [56, 86, 28];
-  const midLeaf: [number, number, number] = [92, 134, 42];
-  const sunlitLeaf: [number, number, number] = [132, 174, 58];
+  const deepShadowLeaf: [number, number, number] = [38, 66, 22];
+  const shadowLeaf: [number, number, number] = [58, 94, 30];
+  const midLeaf: [number, number, number] = [94, 140, 44];
+  const sunlitLeaf: [number, number, number] = [144, 188, 64];
+  const veinTint: [number, number, number] = [132, 172, 66];
 
-  // Sembrar 46 hojitas ovaladas superpuestas con transparencia entre huecos
-  const hojas: Array<{ cx: number; cy: number; rx: number; ry: number; ang: number; tone: number }> = [];
-  for (let k = 0; k < 46; k++) {
+  // Sembrar 68 hojas orgánicas de roble superpuestas en 3 capas de profundidad
+  const hojas: Array<{
+    cx: number;
+    cy: number;
+    rx: number;
+    ry: number;
+    ang: number;
+    tone: number;
+    depth: number;
+  }> = [];
+  for (let k = 0; k < 68; k++) {
     hojas.push({
-      cx: hash2D(k, 1, 64, 901),
-      cy: hash2D(k, 2, 64, 907),
-      rx: 0.12 + hash2D(k, 3, 64, 911) * 0.08,
-      ry: 0.075 + hash2D(k, 4, 64, 919) * 0.05,
-      ang: hash2D(k, 5, 64, 929) * Math.PI * 2,
-      tone: hash2D(k, 6, 64, 937),
+      cx: hash2D(k, 1, 128, 901),
+      cy: hash2D(k, 2, 128, 907),
+      rx: 0.095 + hash2D(k, 3, 128, 911) * 0.06,
+      ry: 0.048 + hash2D(k, 4, 128, 919) * 0.036,
+      ang: hash2D(k, 5, 128, 929) * Math.PI * 2,
+      tone: hash2D(k, 6, 128, 937),
+      depth: k / 67,
     });
   }
 
@@ -817,14 +828,17 @@ function genFollajeRoblePatrix(size = 128): PixelFields {
     for (let x = 0; x < size; x++) {
       const u = x / size;
       const i = y * size + x;
-      const micro = valueNoisePeriodic(u, v, 32, 953);
+      const micro = valueNoisePeriodic(u, v, 48, 953);
 
-      let maxLeaf = 0;
+      let bestScore = -1;
+      let bestCov = 0;
       let bestTone = 0.5;
+      let bestDepth = 0.5;
       let bestVein = 0;
+      let bestTip = 0;
 
       for (const h of hojas) {
-        // Wrap periódico para que tilee sin cortes en los bloques de copa
+        // Wrap periódico para tileo perfecto sin costuras en las copas
         let dx = u - h.cx;
         let dy = v - h.cy;
         if (dx > 0.5) dx -= 1;
@@ -836,65 +850,151 @@ function genFollajeRoblePatrix(size = 128): PixelFields {
         const sa = Math.sin(h.ang);
         const lx = dx * ca + dy * sa;
         const ly = -dx * sa + dy * ca;
-        const d = Math.hypot(lx / h.rx, ly / h.ry);
+        const nx = lx / h.rx;
+        if (Math.abs(nx) >= 1.0) continue;
+
+        // Silueta acuminada de hoja con suaves lóbulos de roble
+        const lobulo = 1 + 0.14 * Math.cos(nx * Math.PI * 5);
+        const anchoPerfil = Math.pow(Math.max(0, 1 - nx * nx), 0.72) * lobulo;
+        const ny = ly / (h.ry * Math.max(0.08, anchoPerfil));
+        const d = Math.abs(ny);
         if (d < 1.0) {
           const cov = 1 - d;
-          const vein = Math.exp(-Math.abs(ly / h.ry) * 14) * cov;
-          if (cov > maxLeaf) {
-            maxLeaf = cov;
+          const mainVein = Math.exp(-Math.abs(ly / h.ry) * 18) * (1 - Math.abs(nx) * 0.65);
+          const latPhase = (nx * 4.4 - Math.abs(ly / h.ry) * 1.65) * Math.PI;
+          const sideVein = Math.pow(Math.max(0, Math.cos(latPhase)), 7) * cov * 0.55;
+          const vein = clamp01(mainVein + sideVein);
+          const layerScore = h.depth * 0.78 + cov * 0.34;
+          if (layerScore > bestScore) {
+            bestScore = layerScore;
+            bestCov = cov;
             bestTone = h.tone;
+            bestDepth = h.depth;
             bestVein = vein;
+            bestTip = clamp01((nx + 0.4) * 0.65);
           }
         }
       }
 
-      const opaque = maxLeaf > 0.14;
-      let col = mixRGB(shadowLeaf, midLeaf, bestTone * 0.75 + maxLeaf * 0.3);
-      if (bestTone > 0.58 || maxLeaf > 0.62) {
-        col = mixRGB(col, sunlitLeaf, clamp01(bestTone * 0.5 + maxLeaf * 0.35 - 0.2));
+      const opaque = bestCov > 0.12;
+      let col = mixRGB(deepShadowLeaf, shadowLeaf, clamp01(bestDepth * 0.8 + bestTone * 0.4));
+      col = mixRGB(col, midLeaf, clamp01(bestDepth * 0.75 + bestCov * 0.35 - 0.12));
+      if (bestDepth > 0.58 || (bestTone > 0.62 && bestDepth > 0.32)) {
+        col = mixRGB(col, sunlitLeaf, clamp01(bestDepth * 0.55 + bestTip * 0.35 - 0.25));
       }
-      col = mixRGB(col, [126, 158, 62], bestVein * 0.35);
+      col = mixRGB(col, veinTint, bestVein * 0.42);
+      col = mixRGB(col, deepShadowLeaf, (1 - micro) * 0.1);
 
       const alphaByte = opaque ? 255 : 0;
       setPixelColor(f.albedo, i, col[0], col[1], col[2], alphaByte);
       f.alpha![i] = opaque ? 1 : 0;
-      f.height[i] = opaque ? clamp01(0.42 + maxLeaf * 0.45 + bestVein * 0.13) : 0.15;
-      f.ao[i] = clamp01(0.45 + maxLeaf * 0.55);
-      f.roughness[i] = clamp01(0.54 + micro * 0.18 - bestVein * 0.1);
+      f.height[i] = opaque ? clamp01(0.32 + bestDepth * 0.32 + bestCov * 0.26 + bestVein * 0.14) : 0.12;
+      f.ao[i] = clamp01(0.38 + bestDepth * 0.34 + bestCov * 0.32);
+      f.roughness[i] = clamp01(0.50 + micro * 0.16 - bestVein * 0.12);
       f.metallic[i] = 0;
     }
   }
   return f;
 }
 
-function genPinoAgujasPatrix(size = 128): PixelFields {
+function genPinoAgujasPatrix(size = 256): PixelFields {
   const f = crearCampos(size);
   f.alpha = new Float32Array(size * size);
 
-  const deepSpruce: [number, number, number] = [42, 68, 32];
-  const midSpruce: [number, number, number] = [66, 102, 44];
-  const tipSpruce: [number, number, number] = [96, 134, 58];
+  const deepSpruce: [number, number, number] = [28, 54, 24];
+  const midSpruce: [number, number, number] = [54, 94, 38];
+  const tipSpruce: [number, number, number] = [98, 144, 58];
+  const twigWood: [number, number, number] = [84, 62, 36];
+
+  // 58 ramillas plumosas de pino con haces de acículas imbricadas
+  const ramas: Array<{
+    cx: number;
+    cy: number;
+    len: number;
+    width: number;
+    ang: number;
+    depth: number;
+    tone: number;
+  }> = [];
+  for (let k = 0; k < 58; k++) {
+    ramas.push({
+      cx: hash2D(k, 11, 128, 1009),
+      cy: hash2D(k, 12, 128, 1013),
+      len: 0.13 + hash2D(k, 13, 128, 1019) * 0.08,
+      width: 0.075 + hash2D(k, 14, 128, 1031) * 0.045,
+      ang: (hash2D(k, 15, 128, 1039) - 0.5) * 1.4 + Math.PI * 0.5,
+      depth: k / 57,
+      tone: hash2D(k, 16, 128, 1049),
+    });
+  }
 
   for (let y = 0; y < size; y++) {
     const v = y / size;
     for (let x = 0; x < size; x++) {
       const u = x / size;
       const i = y * size + x;
-      const n1 = fbmPeriodic(u * 2.2, v * 0.85, 16, 3, 1009);
-      const needles = valueNoisePeriodic(u * 5.0 + Math.abs(v - 0.5) * 1.4, v * 1.8, 16, 1021);
-      const mask = n1 * 0.55 + needles * 0.45;
-      const opaque = mask > 0.24;
+      const micro = valueNoisePeriodic(u, v, 64, 1061);
 
-      let col = mixRGB(deepSpruce, midSpruce, clamp01((mask - 0.24) / 0.42));
-      if (mask > 0.62) {
-        col = mixRGB(col, tipSpruce, (mask - 0.62) / 0.38);
+      let bestScore = -1;
+      let bestNeedle = 0;
+      let bestDepth = 0.5;
+      let bestTip = 0;
+      let bestTone = 0.5;
+      let bestStem = 0;
+
+      for (const r of ramas) {
+        let dx = u - r.cx;
+        let dy = v - r.cy;
+        if (dx > 0.5) dx -= 1;
+        if (dx < -0.5) dx += 1;
+        if (dy > 0.5) dy -= 1;
+        if (dy < -0.5) dy += 1;
+
+        const ca = Math.cos(r.ang);
+        const sa = Math.sin(r.ang);
+        const lx = dx * ca + dy * sa;
+        const ly = -dx * sa + dy * ca;
+        const nx = lx / r.len;
+        if (Math.abs(nx) >= 1.0) continue;
+
+        const tAlong = clamp01((nx + 1) * 0.5);
+        const envWidth = r.width * (0.22 + 0.85 * Math.sin(tAlong * Math.PI));
+        const ny = Math.abs(ly) / Math.max(0.01, envWidth);
+        if (ny > 1.0) continue;
+
+        // Tallo central de la ramilla + haces finos de acículas en V
+        const stem = Math.exp(-Math.abs(ly / r.width) * 26) * (1 - tAlong * 0.6);
+        const rib = nx * 13.5 - ny * 4.8;
+        const fine = Math.abs(Math.sin(rib * Math.PI * 2));
+        const needle = clamp01((1 - ny * 0.72) * (0.48 + 0.52 * fine) + stem * 0.35);
+        if (needle > 0.34) {
+          const score = r.depth * 0.8 + needle * 0.3;
+          if (score > bestScore) {
+            bestScore = score;
+            bestNeedle = needle;
+            bestDepth = r.depth;
+            bestTip = clamp01(tAlong * 0.55 + ny * 0.55);
+            bestTone = r.tone;
+            bestStem = stem;
+          }
+        }
       }
+
+      const opaque = bestNeedle > 0.34;
+      let col = mixRGB(deepSpruce, midSpruce, clamp01(bestDepth * 0.75 + bestNeedle * 0.35));
+      if (bestTip > 0.45 || bestDepth > 0.65) {
+        col = mixRGB(col, tipSpruce, clamp01((bestTip * 0.55 + bestDepth * 0.45 + bestTone * 0.2) - 0.28));
+      }
+      if (bestStem > 0.38) {
+        col = mixRGB(col, twigWood, (bestStem - 0.38) * 0.9);
+      }
+      col = mixRGB(col, deepSpruce, (1 - micro) * 0.14);
 
       setPixelColor(f.albedo, i, col[0], col[1], col[2], opaque ? 255 : 0);
       f.alpha![i] = opaque ? 1 : 0;
-      f.height[i] = opaque ? clamp01(0.4 + mask * 0.6) : 0.12;
-      f.ao[i] = clamp01(0.45 + mask * 0.55);
-      f.roughness[i] = clamp01(0.68 - mask * 0.14);
+      f.height[i] = opaque ? clamp01(0.32 + bestDepth * 0.32 + bestNeedle * 0.36) : 0.1;
+      f.ao[i] = clamp01(0.38 + bestDepth * 0.35 + bestNeedle * 0.3);
+      f.roughness[i] = clamp01(0.62 - bestNeedle * 0.14 + micro * 0.1);
       f.metallic[i] = 0;
     }
   }
@@ -1198,20 +1298,20 @@ export function obtenerBancoPatrix(scene: Scene): PatrixBanco {
   );
   sets.set(
     "follaje_roble",
-    empaquetarTextureSet(scene, "follaje_roble", 128, genFollajeRoblePatrix(128), 2.1, {
+    empaquetarTextureSet(scene, "follaje_roble", 256, genFollajeRoblePatrix(256), 2.35, {
       parallaxBias: 0,
       alphaCutout: true,
       doubleSided: true,
-      translucency: 0.42,
+      translucency: 0.52,
     })
   );
   sets.set(
     "pino_agujas",
-    empaquetarTextureSet(scene, "pino_agujas", 128, genPinoAgujasPatrix(128), 2.0, {
+    empaquetarTextureSet(scene, "pino_agujas", 256, genPinoAgujasPatrix(256), 2.25, {
       parallaxBias: 0,
       alphaCutout: true,
       doubleSided: true,
-      translucency: 0.3,
+      translucency: 0.38,
     })
   );
   sets.set(

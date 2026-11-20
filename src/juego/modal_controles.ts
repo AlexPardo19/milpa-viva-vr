@@ -1,16 +1,18 @@
 import { VARIEDADES_MAIZ, TipoSemilla } from '../nucleo';
 
-export type ModoControlDetectado = 'teclado' | 'oculus';
+export type ModoControlDetectado = 'teclado' | 'xbox' | 'oculus';
 
 /**
- * Modal de Bienvenida, Detección Automática de Dispositivo (Teclado/PC vs. Oculus/Meta Quest VR)
+ * Modal de Bienvenida, Detección Automática de Dispositivo (Teclado/PC, Mando Xbox Series S y Oculus/Meta Quest VR)
  * y Guía Agronómica de las 4 Especies de Maíz.
  */
 export class ModalControlesBienvenida {
     private modalEl: HTMLDivElement | null = null;
     private modoDetectado: ModoControlDetectado = 'teclado';
-    private pestanaActiva: 'teclado' | 'oculus' | 'especies' = 'teclado';
+    private pestanaActiva: 'teclado' | 'xbox' | 'oculus' | 'especies' = 'teclado';
     private vrSoportado: boolean = false;
+    private xboxConectado: boolean = false;
+    private nombreMandoXbox: string = 'Mando Xbox Series X|S Wireless Controller';
     private nombreDispositivoVR: string = 'No detectado (Modo PC Teclado y Ratón)';
     public onCerrar?: () => void;
 
@@ -69,6 +71,24 @@ export class ModalControlesBienvenida {
         }
     }
 
+    /**
+     * Permite actualizar el estado cuando se conecta o desconecta un mando Xbox Series S
+     */
+    public notificarEstadoXbox(conectado: boolean, nombreMando?: string): void {
+        this.xboxConectado = conectado;
+        if (nombreMando) {
+            this.nombreMandoXbox = nombreMando;
+        }
+        if (conectado && !this.vrSoportado) {
+            this.modoDetectado = 'xbox';
+            this.nombreDispositivoVR = `🎮 ${this.nombreMandoXbox} conectado`;
+        } else if (!conectado && !this.vrSoportado) {
+            this.modoDetectado = 'teclado';
+            this.nombreDispositivoVR = 'PC de Escritorio (Teclado, Ratón y Xbox Series S)';
+        }
+        this.renderizarContenido();
+    }
+
     private construirDOM(): void {
         if (typeof document === 'undefined' || this.modalEl) return;
 
@@ -91,7 +111,7 @@ export class ModalControlesBienvenida {
         this.renderizarContenido();
     }
 
-    public mostrar(pestana?: 'teclado' | 'oculus' | 'especies'): void {
+    public mostrar(pestana?: 'teclado' | 'xbox' | 'oculus' | 'especies'): void {
         if (!this.modalEl) this.construirDOM();
         if (pestana) this.pestanaActiva = pestana;
         if (this.modalEl) {
@@ -124,6 +144,8 @@ export class ModalControlesBienvenida {
 
         const badgeVR = this.vrSoportado
             ? `<span style="background:rgba(16,185,129,0.22);border:2px solid #34d399;color:#6ee7b7;padding:3px 9px;border-radius:0;font-size:0.76rem;font-weight:700;">🥽 ${this.nombreDispositivoVR}</span>`
+            : this.xboxConectado
+            ? `<span style="background:rgba(16,185,129,0.22);border:2px solid #4ade80;color:#86efac;padding:3px 9px;border-radius:0;font-size:0.76rem;font-weight:700;">${this.nombreDispositivoVR}</span>`
             : `<span style="background:rgba(59,130,246,0.22);border:2px solid #60a5fa;color:#bfdbfe;padding:3px 9px;border-radius:0;font-size:0.76rem;font-weight:700;">🖥️ ${this.nombreDispositivoVR}</span>`;
 
         const btnTabEstilo = (activo: boolean) => `
@@ -183,6 +205,39 @@ export class ModalControlesBienvenida {
                     <span>🎃 +Calabaza <kbd>[N]</kbd></span> ·
                     <span>🪵 Tutor <kbd>[T]</kbd></span> ·
                     <span>🛡️ Petate <kbd>[G]</kbd></span>
+                </div>
+            `;
+        } else if (this.pestanaActiva === 'xbox') {
+            cuerpoHTML = `
+                <div style="background:${this.xboxConectado ? 'rgba(16,185,129,0.16)' : 'rgba(59,130,246,0.14)'};border:2px solid ${this.xboxConectado ? '#4ade80' : '#60a5fa'};border-radius:0;padding:10px 12px;margin-bottom:10px;font-size:0.82rem;color:#f8fafc;">
+                    ${
+                        this.xboxConectado
+                            ? `✅ <b>¡${this.nombreMandoXbox} activo!</b> Vibración háptica Dual-Rumble y navegación completa de parcela y menús habilitadas.`
+                            : '🎮 <b>Compatibilidad nativa con Mando Xbox Series S|X (Bluetooth o USB-C):</b> Conecta tu mando y pulsa cualquier botón para activarlo al instante.'
+                    }
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(250px, 1fr));gap:10px;margin-bottom:10px;">
+                    <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.16);border-radius:0;padding:12px;">
+                        <div style="color:#4ade80;font-weight:800;font-size:0.88rem;margin-bottom:6px;">🕹️ Sticks, Gatillos y Bompers (Estilo Minecraft Xbox)</div>
+                        <ul style="margin:0;padding-left:18px;color:#e2e8f0;font-size:0.8rem;line-height:1.55;">
+                            <li><b>Stick Izquierdo (LS)</b>: Caminar 360° analógico · <b>L3 (pulsar stick)</b>: Correr / Sprint.</li>
+                            <li><b>Stick Derecho (RS)</b>: Mirar alrededor o rotar cámara · <b>R3 (pulsar stick)</b>: Vista 1ª Persona ↔ Orbital.</li>
+                            <li><b>RT (Gatillo Der.)</b>: Usar herramienta equipada (arar, sembrar, regar, abonar, cosechar).</li>
+                            <li><b>LT (Gatillo Izq.)</b>: Acción contextual rápida (cosechar, recoger mazorca o abrir estación).</li>
+                            <li><b>LB / RB (Bompers)</b>: Cambiar ranura anterior / siguiente en la Hotbar (1–9).</li>
+                        </ul>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.16);border-radius:0;padding:12px;">
+                        <div style="color:#fcd34d;font-weight:800;font-size:0.88rem;margin-bottom:6px;">🟢🔴🔵🟡 Botones A B X Y, Cruceta y Menús</div>
+                        <ul style="margin:0;padding-left:18px;color:#e2e8f0;font-size:0.8rem;line-height:1.55;">
+                            <li><b style="color:#4ade80;">[A]</b>: Saltar en campo · Confirmar botón seleccionado en menús.</li>
+                            <li><b style="color:#f87171;">[B]</b>: Cerrar ventana abierta · Quitar / limpiar planta en parcela.</li>
+                            <li><b style="color:#60a5fa;">[X]</b>: Abrir estación apuntada o Deshierbar y limpiar plagas.</li>
+                            <li><b style="color:#facc15;">[Y]</b>: Abrir / Cerrar Inventario (Mochila y Troje).</li>
+                            <li><b>Cruceta (D-Pad)</b>: <b>▲</b> +15d Sol · <b>▼</b> Panel Clima · <b>◀</b> +Frijol · <b>▶</b> +Calabaza.</li>
+                            <li><b>View (⧉)</b>: Siguiente estación (1–6) · <b>Menu (☰)</b>: Pausa.</li>
+                        </ul>
+                    </div>
                 </div>
             `;
         } else if (this.pestanaActiva === 'oculus') {
@@ -256,13 +311,16 @@ export class ModalControlesBienvenida {
 
                 <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
                     <button id="tabCtrlTeclado" style="${btnTabEstilo(this.pestanaActiva === 'teclado')}">
-                        🖥️ Controles Teclado y Ratón ${this.modoDetectado === 'teclado' ? '(Activo)' : ''}
+                        🖥️ Teclado y Ratón ${this.modoDetectado === 'teclado' ? '(Activo)' : ''}
+                    </button>
+                    <button id="tabCtrlXbox" style="${btnTabEstilo(this.pestanaActiva === 'xbox')}">
+                        🎮 Mando Xbox Series S ${this.xboxConectado ? '(Conectado)' : ''}
                     </button>
                     <button id="tabCtrlOculus" style="${btnTabEstilo(this.pestanaActiva === 'oculus')}">
-                        🥽 Controles Oculus / Quest VR ${this.modoDetectado === 'oculus' ? '(Detectado)' : ''}
+                        🥽 Oculus / Quest VR ${this.modoDetectado === 'oculus' ? '(Detectado)' : ''}
                     </button>
                     <button id="tabCtrlEspecies" style="${btnTabEstilo(this.pestanaActiva === 'especies')}">
-                        🌱 4 Especies de Maíz y Clima
+                        🌱 4 Especies y Clima
                     </button>
                 </div>
 
@@ -281,6 +339,10 @@ export class ModalControlesBienvenida {
 
         this.modalEl.querySelector('#tabCtrlTeclado')?.addEventListener('click', () => {
             this.pestanaActiva = 'teclado';
+            this.renderizarContenido();
+        });
+        this.modalEl.querySelector('#tabCtrlXbox')?.addEventListener('click', () => {
+            this.pestanaActiva = 'xbox';
             this.renderizarContenido();
         });
         this.modalEl.querySelector('#tabCtrlOculus')?.addEventListener('click', () => {

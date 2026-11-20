@@ -58,6 +58,7 @@ import { EspantapajarosGuia } from "./educativo/espantapajaros_guia";
 import { VARIEDADES_MAIZ, REGLAS_JUEGO } from "./nucleo";
 import { AudioSintetizador } from "./audio_sintetizador";
 import { ControladorJugador } from "./controlador_jugador";
+import { ControladorXbox } from "./controlador_xbox";
 
 // Módulos educativos interactivos
 import {
@@ -137,6 +138,7 @@ let relojMuneca: RelojMuneca | null = null;
 let uiPoke: UiPoke | null = null;
 let audioSintetizador: AudioSintetizador | null = null;
 let controladorJugador: ControladorJugador | null = null;
+let controladorXbox: ControladorXbox | null = null;
 
 // Sistemas v4.0 «Milpa Viva»
 const busEventos = new BusEventos();
@@ -795,9 +797,73 @@ async function crearEscena(): Promise<Scene> {
     uiEdu?.mostrarToast(msg);
   };
 
+  // G2. Compatibilidad nativa con Mando de Xbox Series S|X (Gamepad API + Dual-Rumble)
+  controladorXbox = new ControladorXbox(controladorJugador, {
+    onCambiarSlotHotbar: (dir) => {
+      hotbarPixel?.avanzarSlot(dir);
+    },
+    onQuitarPlanta: () => {
+      ejecutarQuitarPlanta();
+    },
+    onAbrirInventario: () => {
+      controladorJugador?.liberarPuntero();
+      modalCofreTroje?.alternar();
+    },
+    onAccionX: () => {
+      const obj = controladorJugador?.tipoObjetivoEnfocado;
+      if (
+        obj === "almacen" ||
+        obj === "canasta" ||
+        obj === "dispensador" ||
+        obj === "fogon" ||
+        obj === "banco" ||
+        obj === "codice" ||
+        obj === "don_elote"
+      ) {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", code: "KeyE" }));
+      } else {
+        const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
+        malezaSistema?.deshierbarNodo(id, 0.6);
+        faunaMilpa?.limpiarPlagasEnNodo(id);
+        controladorJugador?.usarHerramientaActiva();
+      }
+    },
+    onAvanzarSol: () => {
+      ejecutarAccion("sol");
+    },
+    onAbrirClima: () => {
+      controladorJugador?.liberarPuntero();
+      panelClima?.toggle();
+    },
+    onAsociarFrijol: () => {
+      ejecutarAccion("frijol");
+    },
+    onAsociarCalabaza: () => {
+      ejecutarAccion("calabaza");
+    },
+    onCambiarEstacion: () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", code: "Tab" }));
+    },
+    onEscape: () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape" }));
+    },
+    onAbrirGuiaXbox: () => {
+      controladorJugador?.liberarPuntero();
+      modalControles?.mostrar("xbox");
+    },
+    onEstadoConexion: (conectado, nombre) => {
+      modalControles?.notificarEstadoXbox(conectado, nombre);
+    },
+    onToast: (msg) => {
+      if (menuPrincipal?.estaAbierto()) return;
+      uiEdu?.mostrarToast(msg);
+    },
+  });
+
   // Exponer referencias globales para depuración y pruebas automatizadas
   (window as any).camaraPrincipal = camera;
   (window as any).controladorJugador = controladorJugador;
+  (window as any).controladorXbox = controladorXbox;
   (window as any).espantapajaros = espantapajaros;
   (window as any).audioSintetizador = audioSintetizador;
   (window as any).surcoMilpa = surcoMilpa;
@@ -1761,8 +1827,11 @@ async function crearEscena(): Promise<Scene> {
     espantapajaros?.animar(tiempoAcumulado, clima.viento, posJugador);
     mesaClimaPrejuego?.animar(tiempoAcumulado);
     dispensadorSemillas?.animar(tiempoAcumulado);
-    if (!enXR && !juegoPausado) {
-      controladorJugador?.actualizar(dt);
+    if (!enXR) {
+      controladorXbox?.actualizar(dt);
+      if (!juegoPausado) {
+        controladorJugador?.actualizar(dt);
+      }
     }
     herramientas3D?.animarIdle(tiempoAcumulado);
 

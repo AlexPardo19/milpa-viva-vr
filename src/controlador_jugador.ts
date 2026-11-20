@@ -78,7 +78,7 @@ export class ControladorJugador {
   public velocidadCaminar = 3.1;
   public velocidadCorrer = 5.0;
 
-  // Estado de teclas y física de salto
+  // Estado de teclas, mando Xbox Series S y física de salto
   private teclasPresionadas: Record<string, boolean> = {};
   private mouseBloqueado = false;
   private timerPaso = 0;
@@ -86,6 +86,13 @@ export class ControladorJugador {
   private velY = 0;
   private enSuelo = true;
   private readonly ALTURA_OJOS = 1.55;
+
+  public moveAnalogicoForward = 0;
+  public moveAnalogicoRight = 0;
+  public lookAnalogicoYaw = 0;
+  public lookAnalogicoPitch = 0;
+  public corriendoGamepad = false;
+  public usandoGamepad = false;
 
   // Retícula tipo cruz (+) estilo Minecraft y tooltip en pantalla
   private reticulaElem!: HTMLDivElement;
@@ -208,7 +215,7 @@ export class ControladorJugador {
     document.body.appendChild(this.tooltipElem);
   }
 
-  private hayModalAbierto(): boolean {
+  public hayModalAbierto(): boolean {
     const idsModales = [
       "menuPrincipalMinecraft",
       "menuPausaMinecraft",
@@ -451,11 +458,36 @@ export class ControladorJugador {
     }
   }
 
+  public saltar(): boolean {
+    if (this.modo === "fps" && this.enSuelo && !this.hayModalAbierto()) {
+      this.velY = 3.8;
+      this.enSuelo = false;
+      return true;
+    }
+    return false;
+  }
+
   public actualizar(dt: number): void {
-    if (this.modo !== "fps") return;
     if (this.hayModalAbierto()) return;
 
-    // 1. Detección de teclas de movimiento
+    if (this.modo === "orbital") {
+      if (Math.abs(this.lookAnalogicoYaw) > 0.001 || Math.abs(this.lookAnalogicoPitch) > 0.001) {
+        this.camaraOrbital.alpha -= this.lookAnalogicoYaw * dt * 2.4;
+        this.camaraOrbital.beta = Math.max(
+          0.2,
+          Math.min(Math.PI / 2.08, this.camaraOrbital.beta - this.lookAnalogicoPitch * dt * 1.8)
+        );
+      }
+      if (Math.abs(this.moveAnalogicoForward) > 0.001) {
+        this.camaraOrbital.radius = Math.max(
+          3.0,
+          Math.min(65.0, this.camaraOrbital.radius - this.moveAnalogicoForward * dt * 12.0)
+        );
+      }
+      return;
+    }
+
+    // 1. Detección de teclas de movimiento + Stick Izquierdo (Mando Xbox Series S)
     let moveForward = 0;
     let moveRight = 0;
 
@@ -464,23 +496,43 @@ export class ControladorJugador {
     if (this.teclasPresionadas["KeyD"]) moveRight += 1;
     if (this.teclasPresionadas["KeyA"]) moveRight -= 1;
 
-    // Giro suave con flechas izquierda/derecha (KeyQ queda reservada para Quitar Planta [Q])
+    if (Math.abs(this.moveAnalogicoForward) > 0.001 || Math.abs(this.moveAnalogicoRight) > 0.001) {
+      moveForward += this.moveAnalogicoForward;
+      moveRight += this.moveAnalogicoRight;
+    } else {
+      this.corriendoGamepad = false;
+    }
+
+    // Giro suave con flechas izquierda/derecha o Stick Derecho del mando Xbox Series S
     if (this.teclasPresionadas["ArrowLeft"]) {
       this.camaraFPS.rotation.y -= dt * 2.2;
     }
     if (this.teclasPresionadas["ArrowRight"]) {
       this.camaraFPS.rotation.y += dt * 2.2;
     }
+    if (Math.abs(this.lookAnalogicoYaw) > 0.001 || Math.abs(this.lookAnalogicoPitch) > 0.001) {
+      this.camaraFPS.rotation.y += this.lookAnalogicoYaw * 2.65 * dt;
+      this.camaraFPS.rotation.x += this.lookAnalogicoPitch * 2.1 * dt;
+      const maxPitch = Math.PI / 2.25;
+      this.camaraFPS.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, this.camaraFPS.rotation.x));
+    }
 
-    // Salto estilo Minecraft con Barra Espaciadora [Space]
+    // Salto estilo Minecraft con Barra Espaciadora [Space] o Botón [A] en Xbox
     if (this.teclasPresionadas["Space"] && this.enSuelo) {
       this.velY = 3.8;
       this.enSuelo = false;
     }
 
-    const estaMoviendose = moveForward !== 0 || moveRight !== 0;
-    const corriendo = this.teclasPresionadas["ShiftLeft"] || this.teclasPresionadas["ShiftRight"];
-    const velocidad = corriendo ? this.velocidadCorrer : this.velocidadCaminar;
+    const magMovimiento = Math.min(1.0, Math.hypot(moveForward, moveRight));
+    const estaMoviendose = magMovimiento > 0.02;
+    if (magMovimiento < 0.35) {
+      this.corriendoGamepad = false;
+    }
+    const corriendo =
+      this.teclasPresionadas["ShiftLeft"] ||
+      this.teclasPresionadas["ShiftRight"] ||
+      this.corriendoGamepad;
+    const velocidad = (corriendo ? this.velocidadCorrer : this.velocidadCaminar) * magMovimiento;
 
     if (estaMoviendose) {
       const yaw = this.camaraFPS.rotation.y;
@@ -899,6 +951,16 @@ export class ControladorJugador {
   }
 
   private mostrarTooltip(texto: string): void {
+    if (this.usandoGamepad) {
+      texto = texto
+        .replace(/\[Clic Izq\]/g, "[RT]")
+        .replace(/\[Clic Der \/ F\]/g, "[LT / X]")
+        .replace(/\[Clic Der\]/g, "[LT]")
+        .replace(/\[Clic\]/g, "[RT / X]")
+        .replace(/\[Q\]/g, "[B]")
+        .replace(/\[I\]/g, "[Y]")
+        .replace(/\[E\]/g, "[X]");
+    }
     this.tooltipElem.textContent = texto;
     this.tooltipElem.style.display = "block";
   }

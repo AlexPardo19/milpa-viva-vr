@@ -24,7 +24,14 @@ import { registrarCaja } from "./colisiones";
 import { ClimateState, Metricas } from "./clima";
 import { PaisajeExterior } from "./entorno/paisaje_exterior";
 import { GranjaDecorativa } from "./entorno/granja_decorativa";
-import { aplicarEstiloPatrix, ControladorEstiloPatrix } from "./estilo_patrix";
+import {
+  animarCopasArboles,
+  aplicarEstiloPatrix,
+  ControladorEstiloPatrix,
+  CopaArbolAnim,
+  poblarPlanosFoliaresCopa,
+  SubHojaAnim,
+} from "./estilo_patrix";
 import { crearMaterialPatrixPBR, obtenerBancoPatrix } from "./ui/texturas_patrix_pbr";
 
 function clamp01(v: number): number {
@@ -411,6 +418,7 @@ export class AmbienteEstilizado {
   private ultimoTiempoStarFade = 0;
 
   private readonly granjaDecorativa: GranjaDecorativa;
+  private readonly copasArboles: CopaArbolAnim[] = [];
   private paisaje!: PaisajeExterior;
   private matCielo!: SkyMaterial;
   private cupulaCielo!: Mesh;
@@ -1097,8 +1105,8 @@ export class AmbienteEstilizado {
     });
     const matFollaje = crearMaterialPatrixPBR(sceneSafe(this.scene), "follaje_roble", {
       nombre: "patrixDetalleFollaje",
-      uScale: 1,
-      vScale: 1,
+      uScale: 2,
+      vScale: 2,
       usarPOM: false,
       cacheable: true,
     });
@@ -1224,25 +1232,63 @@ export class AmbienteEstilizado {
       registrarCaja(`arbol_${idx}`, ax, az, 0.42 * esc, 0.42 * esc);
       this.shadowGen.addShadowCaster(tronco);
 
-      // Racimos superpuestos de hojas Patrix (cajas con follaje alfa-cutout + planos cruzados)
+      // Racimos superpuestos de hojas Patrix (cajas con follaje alfa-cutout + planos cruzados animados)
+      const pivotY = 1.62;
+      const copaPivot = new TransformNode(`arbolCopaPivot_${idx}`, this.scene);
+      copaPivot.position.set(0, pivotY, 0);
+      copaPivot.parent = raiz;
+
       const racimos: Array<[number, number, number, number, number, number]> = [
         [0, 2.05, 0, 2.0, 1.15, 2.0],
         [-0.45, 1.85, 0.35, 1.35, 0.9, 1.35],
         [0.48, 1.92, -0.30, 1.4, 0.95, 1.4],
         [0, 2.68, 0, 1.35, 0.9, 1.35],
       ];
+      const hojas: SubHojaAnim[] = [];
       racimos.forEach(([rx, ry, rz, w, h, d], cIdx) => {
         const copa = MeshBuilder.CreateBox(
           `arbolCopa_${idx}_${cIdx}`,
           { width: w, height: h, depth: d },
           this.scene
         );
-        copa.position.set(rx, ry, rz);
-        copa.rotation.y = (idx * 0.7 + cIdx * 0.45);
+        copa.position.set(rx, ry - pivotY, rz);
+        const rotY = idx * 0.7 + cIdx * 0.45;
+        copa.rotation.y = rotY;
         copa.material = matFollaje;
-        copa.parent = raiz;
+        copa.parent = copaPivot;
         copa.receiveShadows = true;
+        copa.isPickable = false;
         this.shadowGen.addShadowCaster(copa);
+
+        hojas.push({
+          mesh: copa,
+          baseRotX: 0,
+          baseRotY: rotY,
+          baseRotZ: 0,
+          pesoAleteo: 0.18 + cIdx * 0.08,
+          fase: idx * 1.3 + cIdx * 0.85,
+        });
+      });
+
+      hojas.push(
+        ...poblarPlanosFoliaresCopa(
+          this.scene,
+          copaPivot,
+          matFollaje,
+          `arbolParcela_${idx}`,
+          0.52,
+          1.15,
+          1.45,
+          idx + 1.4,
+          this.shadowGen
+        )
+      );
+
+      this.copasArboles.push({
+        pivot: copaPivot,
+        fase: idx * 1.65 + 0.25,
+        escala: esc,
+        hojas,
       });
     });
   }
@@ -1617,6 +1663,8 @@ export class AmbienteEstilizado {
       b.rotation.x = Math.cos(this.tiempoTotal * freq * 0.7 + phase) * ampViento * 0.5;
     }
 
+    animarCopasArboles(this.copasArboles, this.tiempoTotal, vientoMs);
+    this.paisaje.animar(this.tiempoTotal, vientoMs);
     this.granjaDecorativa.animar(dt, vientoMs);
   }
 }

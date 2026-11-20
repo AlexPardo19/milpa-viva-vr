@@ -1,5 +1,6 @@
 import {
   Color3,
+  InstancedMesh,
   Material,
   Mesh,
   MeshBuilder,
@@ -10,7 +11,28 @@ import {
   Vector3,
   VertexData,
 } from "@babylonjs/core";
+import { calcularFactoresVientoArbol } from "../estilo_patrix";
 import { crearMaterialPatrixPBR } from "../ui/texturas_patrix_pbr";
+
+interface PinoAnim {
+  conos: Array<{
+    mesh: InstancedMesh;
+    baseY: number;
+    alturaRel: number;
+    flex: number;
+  }>;
+  baseX: number;
+  baseZ: number;
+  baseRotY: number;
+  esc: number;
+  fase: number;
+}
+
+interface ArbustoAnim {
+  mesh: Mesh;
+  baseRotY: number;
+  fase: number;
+}
 
 interface OpcionesPico {
   radio: number;
@@ -161,6 +183,9 @@ export class PaisajeExterior {
   public readonly meshesMontana: Mesh[] = [];
   private readonly matVertex: PBRMaterial;
   private readonly matCache = new Map<string, PBRMaterial>();
+  private readonly pinosAnim: PinoAnim[] = [];
+  private readonly arbustosAnim: ArbustoAnim[] = [];
+  private enReposoViento = true;
 
   constructor(
     private readonly scene: Scene,
@@ -329,15 +354,15 @@ export class PaisajeExterior {
     });
     const matPino1 = crearMaterialPatrixPBR(this.scene, "pino_agujas", {
       nombre: "patrixPinoAgujas1",
-      uScale: 2,
-      vScale: 1,
+      uScale: 3,
+      vScale: 2,
       usarPOM: false,
       albedoColor: new Color3(0.95, 1.0, 0.92),
     });
     const matPino2 = crearMaterialPatrixPBR(this.scene, "pino_agujas", {
       nombre: "patrixPinoAgujas2",
-      uScale: 2,
-      vScale: 1,
+      uScale: 3,
+      vScale: 2,
       usarPOM: false,
       albedoColor: new Color3(1.04, 1.06, 0.92),
     });
@@ -384,22 +409,43 @@ export class PaisajeExterior {
       const esc = 0.85 + rnd(i * 7.9) * 1.15;
       const y0 = -0.30;
       const rotY = rnd(i * 9.3) * Math.PI * 2;
-      const mk = (m: Mesh, nom: string, y: number, sombreado = false) => {
+      const mk = (
+        m: Mesh,
+        nom: string,
+        y: number,
+        sombreado = false,
+        congelar = true
+      ): InstancedMesh => {
         const inst = m.createInstance(`${nom}_${colocados}`);
         inst.position.set(x, y0 + y * esc, z);
         inst.scaling.setAll(esc);
         inst.rotation.y = rotY;
         inst.parent = this.root;
         inst.isPickable = false;
-        inst.freezeWorldMatrix();
+        if (congelar) {
+          inst.freezeWorldMatrix();
+        }
         if (sombreado && r < 42 && this.shadowGen) {
           this.shadowGen.addShadowCaster(inst);
         }
+        return inst;
       };
-      mk(tronco, "pTr", 0.65);
-      mk(cono1, "pC1", 2.35, true);
-      mk(cono2, "pC2", 3.65, true);
-      mk(cono3, "pC3", 4.75);
+      mk(tronco, "pTr", 0.65, false, true);
+      const c1 = mk(cono1, "pC1", 2.35, true, false);
+      const c2 = mk(cono2, "pC2", 3.65, true, false);
+      const c3 = mk(cono3, "pC3", 4.75, false, false);
+      this.pinosAnim.push({
+        baseX: x,
+        baseZ: z,
+        baseRotY: rotY,
+        esc,
+        fase: x * 0.13 + z * 0.17 + i * 0.5,
+        conos: [
+          { mesh: c1, baseY: y0 + 2.35 * esc, alturaRel: 1.25 * esc, flex: 0.55 },
+          { mesh: c2, baseY: y0 + 3.65 * esc, alturaRel: 2.55 * esc, flex: 0.85 },
+          { mesh: c3, baseY: y0 + 4.75 * esc, alturaRel: 3.65 * esc, flex: 1.18 },
+        ],
+      });
       colocados++;
     }
   }
@@ -506,8 +552,8 @@ export class PaisajeExterior {
     // Arbustos follaje alfa-cutout Patrix
     const matArbusto = crearMaterialPatrixPBR(this.scene, "follaje_roble", {
       nombre: "patrixExtArbusto",
-      uScale: 1,
-      vScale: 1,
+      uScale: 2,
+      vScale: 2,
       usarPOM: false,
       cacheable: true,
     });
@@ -521,16 +567,80 @@ export class PaisajeExterior {
       const s = 0.72 + rnd(i * 3.1) * 0.68;
       const b = MeshBuilder.CreateBox(`arbusto_${na}`, { width: s * 1.25, height: s * 0.85, depth: s * 1.15 }, this.scene);
       b.position.set(x, -0.30 + s * 0.34, z);
-      b.rotation.y = rnd(i * 4.7) * Math.PI;
+      const rotY = rnd(i * 4.7) * Math.PI;
+      b.rotation.y = rotY;
       b.material = matArbusto;
       b.parent = this.root;
       b.receiveShadows = true;
       b.isPickable = false;
-      b.freezeWorldMatrix();
+      this.arbustosAnim.push({
+        mesh: b,
+        baseRotY: rotY,
+        fase: x * 0.19 + z * 0.23 + i * 0.7,
+      });
       if (r < 26 && this.shadowGen) {
         this.shadowGen.addShadowCaster(b);
       }
       na++;
+    }
+  }
+
+  /** Anima balanceo elástico de las copas de pinos y temblor de arbustos según velocidad del viento. */
+  public animar(tiempo: number, vientoMs: number): void {
+    const { w, lean, freqSway, freqLeaf } = calcularFactoresVientoArbol(vientoMs);
+    if (w === 0) {
+      if (this.enReposoViento) return;
+      for (let i = 0; i < this.pinosAnim.length; i++) {
+        const p = this.pinosAnim[i];
+        for (let k = 0; k < p.conos.length; k++) {
+          const c = p.conos[k];
+          c.mesh.rotation.set(0, p.baseRotY, 0);
+          c.mesh.position.set(p.baseX, c.baseY, p.baseZ);
+        }
+      }
+      for (let i = 0; i < this.arbustosAnim.length; i++) {
+        const a = this.arbustosAnim[i];
+        a.mesh.rotation.set(0, a.baseRotY, 0);
+      }
+      this.enReposoViento = true;
+      return;
+    }
+
+    this.enReposoViento = false;
+    for (let i = 0; i < this.pinosAnim.length; i++) {
+      const p = this.pinosAnim[i];
+      const damp = 1.0 / Math.max(0.85, Math.sqrt(p.esc));
+      const gustX =
+        Math.sin(tiempo * (freqSway * 0.92) + p.fase) * 0.74 +
+        Math.sin(tiempo * (freqSway * 1.53) + p.fase * 1.7) * 0.26;
+      const gustZ =
+        Math.cos(tiempo * (freqSway * 0.81) + p.fase * 1.2) * 0.68 +
+        Math.sin(tiempo * (freqSway * 1.33) + p.fase) * 0.32;
+
+      const angZ = -(lean * 0.82 + gustX * (0.012 + w * 0.052)) * damp;
+      const angX = gustZ * (0.008 + w * 0.032) * damp;
+
+      for (let k = 0; k < p.conos.length; k++) {
+        const c = p.conos[k];
+        const rx = angX * c.flex;
+        const rz = angZ * c.flex;
+        c.mesh.rotation.set(rx, p.baseRotY, rz);
+        c.mesh.position.set(
+          p.baseX - c.alturaRel * rz * 0.72,
+          c.baseY,
+          p.baseZ + c.alturaRel * rx * 0.72
+        );
+      }
+    }
+
+    for (let i = 0; i < this.arbustosAnim.length; i++) {
+      const a = this.arbustosAnim[i];
+      const amp = 0.014 + w * 0.068;
+      const s1 = Math.sin(tiempo * freqLeaf + a.fase);
+      const s2 = Math.cos(tiempo * (freqLeaf * 1.29) + a.fase * 1.5);
+      a.mesh.rotation.z = -(lean * 0.55) + s1 * amp;
+      a.mesh.rotation.x = s2 * amp * 0.7;
+      a.mesh.rotation.y = a.baseRotY + (s1 - s2) * amp * 0.35;
     }
   }
 }

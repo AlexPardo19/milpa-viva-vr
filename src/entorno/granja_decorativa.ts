@@ -12,7 +12,13 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import { WaterMaterial } from "@babylonjs/materials/water/waterMaterial";
-import { esEngineHeadless } from "../estilo_patrix";
+import {
+  animarCopasArboles,
+  CopaArbolAnim,
+  esEngineHeadless,
+  poblarPlanosFoliaresCopa,
+  SubHojaAnim,
+} from "../estilo_patrix";
 import { crearMaterialPatrixPBR, obtenerBancoPatrix } from "../ui/texturas_patrix_pbr";
 
 interface AnimalDeGranja {
@@ -38,6 +44,7 @@ export class GranjaDecorativa {
   public readonly root: TransformNode;
   private readonly rotorMolino: TransformNode;
   private readonly animales: AnimalDeGranja[] = [];
+  private readonly copasArboles: CopaArbolAnim[] = [];
   private readonly matCache = new Map<string, PBRMaterial>();
   private aguaMat: WaterMaterial | null = null;
   private espejoAguaMesh: Mesh | null = null;
@@ -403,8 +410,8 @@ export class GranjaDecorativa {
     });
     const matHoja = crearMaterialPatrixPBR(this.scene, "follaje_roble", {
       nombre: "patrixExtHoja",
-      uScale: 1,
-      vScale: 1,
+      uScale: 2,
+      vScale: 2,
       usarPOM: false,
       cacheable: true,
     });
@@ -503,10 +510,38 @@ export class GranjaDecorativa {
       tronco.receiveShadows = true;
       this.shadowGen?.addShadowCaster(tronco);
 
-      const c1 = this.box(`copaExt1_${idx}`, 2.2, 1.2, 2.2, new Vector3(0, 2.28, 0), matHoja, raizA, true);
-      c1.rotation.y = idx * 0.6;
-      const c2 = this.box(`copaExt2_${idx}`, 1.45, 0.9, 1.45, new Vector3(0, 3.08, 0), matHoja, raizA, true);
-      c2.rotation.y = idx * 0.6 + 0.5;
+      const copaPivot = new TransformNode(`copaExtPivot_${idx}`, this.scene);
+      copaPivot.position.set(0, 1.72, 0);
+      copaPivot.parent = raizA;
+
+      const c1 = this.box(`copaExt1_${idx}`, 2.2, 1.2, 2.2, new Vector3(0, 0.56, 0), matHoja, copaPivot, true);
+      const rot1Y = idx * 0.6;
+      c1.rotation.y = rot1Y;
+      const c2 = this.box(`copaExt2_${idx}`, 1.45, 0.9, 1.45, new Vector3(0, 1.36, 0), matHoja, copaPivot, true);
+      const rot2Y = idx * 0.6 + 0.5;
+      c2.rotation.y = rot2Y;
+
+      const hojas: SubHojaAnim[] = [
+        { mesh: c1, baseRotX: 0, baseRotY: rot1Y, baseRotZ: 0, pesoAleteo: 0.22, fase: idx * 1.1 },
+        { mesh: c2, baseRotX: 0, baseRotY: rot2Y, baseRotZ: 0, pesoAleteo: 0.36, fase: idx * 1.1 + 0.9 },
+        ...poblarPlanosFoliaresCopa(
+          this.scene,
+          copaPivot,
+          matHoja,
+          `arbolExt_${idx}`,
+          0.76,
+          1.22,
+          1.45,
+          idx + 5.2,
+          this.shadowGen
+        ),
+      ];
+      this.copasArboles.push({
+        pivot: copaPivot,
+        fase: idx * 1.47 + 0.35,
+        escala: esc,
+        hojas,
+      });
     });
   }
 
@@ -688,6 +723,7 @@ export class GranjaDecorativa {
     this.tiempo += dt;
 
     this.rotorMolino.rotation.z += dt * (0.45 + Math.max(0, vientoMs) * 0.15);
+    animarCopasArboles(this.copasArboles, this.tiempo, vientoMs);
 
     for (let i = 0; i < this.animales.length; i++) {
       const a = this.animales[i];
