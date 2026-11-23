@@ -4,7 +4,6 @@ import {
     StandardMaterial,
     Color3,
     TransformNode,
-    Vector3,
     Mesh,
     ActionManager,
     ExecuteCodeAction
@@ -14,6 +13,7 @@ import { AudioSintetizador } from '../audio_sintetizador';
 import { BusEventos } from './bus_eventos';
 import { clamp01 } from './util';
 import { crearTexPiedraPixel } from '../ui/texturas_pixel_3d';
+import { VARIEDADES_MAIZ, TipoSemilla } from '../nucleo';
 
 export type EtapaCocina = 'ESPERA' | 'NIXTAMAL' | 'MOLIENDA' | 'FORMADO' | 'COMAL' | 'LISTO';
 
@@ -21,10 +21,12 @@ export interface RecetaTradicional {
     id: string;
     nombre: string;
     icono: string;
-    razaPreferida?: string; // Nombre parcial o color de raza ideal
+    razaPreferida?: TipoSemilla;
+    madurezPreferida?: 'elote' | 'grano_seco';
     requiereQuelite?: boolean;
     requiereFrijol?: boolean;
     requiereCalabaza?: boolean;
+    requiereHuitlacoche?: boolean;
     explicacionCientifica: string;
 }
 
@@ -33,41 +35,46 @@ export const RECETAS_MILPA: RecetaTradicional[] = [
         id: 'tortilla_azul',
         nombre: 'Tortillas de Maíz Azul Nixtamalizado',
         icono: '🫓',
-        razaPreferida: 'Azul',
+        razaPreferida: 'azul',
+        madurezPreferida: 'grano_seco',
         explicacionCientifica:
-            'La nixtamalización con hidróxido de calcio (cal) gelatiniza el almidón, libera la Niacina (Vitamina B3) previniendo la pelagra y multiplica el calcio biodisponible.'
+            'La nixtamalización con cal viva Ca(OH)₂ gelatiniza el almidón, libera Niacina (Vitamina B3) y conserva las antocianinas antioxidantes del Maíz Azul Cónico.'
     },
     {
         id: 'elote_asado',
         nombre: 'Elote Asado al Carbón con Chile y Limón',
         icono: '🌽',
-        razaPreferida: 'Chalqueño',
+        razaPreferida: 'chalqueno',
+        madurezPreferida: 'elote',
         explicacionCientifica:
-            'Cosechado en etapa R3 (grano lechoso), los azúcares solubles aún no se han polimerizado del todo en almidón rígido, dándole su dulzor jugoso.'
+            'Cosechado en etapa R3 (grano lechoso ~73% humedad), los azúcares solubles aún no se polimerizan en almidón rígido, dando su dulzor jugoso característico.'
     },
     {
         id: 'esquites_epazote',
-        nombre: 'Esquites Tradicionales con Quelites',
+        nombre: 'Esquites Tradicionales con Quelites y Epazote',
         icono: '🥣',
+        madurezPreferida: 'elote',
         requiereQuelite: true,
         explicacionCientifica:
-            'Los granos tiernos hervidos con quelites de la milpa aportan hierro, betacarotenos y aminoácidos esenciales.'
+            'Los granos tiernos hervidos con quelites y epazote aportan hierro, betacarotenos, omega-3 y aminoácidos esenciales.'
     },
     {
         id: 'palomitas_momochtli',
         nombre: 'Momochtli (Palomitas Prehispánicas)',
         icono: '🍿',
-        razaPreferida: 'Palomero',
+        razaPreferida: 'palomero',
+        madurezPreferida: 'grano_seco',
         explicacionCientifica:
-            'El pericarpio vítreo ultraduro del Maíz Palomero Toluqueño actúa como olla de presión microscópica: a 180 °C la humedad interna (14%) vaporiza y expande el endospermo.'
+            'El pericarpio vítreo ultraduro del Palomero Toluqueño seco (~14% humedad) actúa como olla de presión microscópica: a 180 °C el vapor expande el endospermo.'
     },
     {
         id: 'tamal_hoja',
-        nombre: 'Tamal de Masa Colada en Totomoxtle',
+        nombre: 'Tamal de Maíz Rojo en Totomoxtle',
         icono: '🫔',
-        razaPreferida: 'Tuxpeño',
+        razaPreferida: 'rojo',
+        madurezPreferida: 'grano_seco',
         explicacionCientifica:
-            'Las brácteas secas de la mazorca (totomoxtle) conservan el vapor durante la cocción y perfuman la masa nixtamalizada.'
+            'Las brácteas secas (totomoxtle) conservan el vapor durante la cocción y perfuman la masa nixtamalizada rica en flavonoides del Maíz Rojo.'
     },
     {
         id: 'quesadilla_flor',
@@ -75,7 +82,15 @@ export const RECETAS_MILPA: RecetaTradicional[] = [
         icono: '🥟',
         requiereCalabaza: true,
         explicacionCientifica:
-            'Combina la masa nixtamalizada con las flores de Cucurbita pepo ricas en ácido fólico y antioxidantes.'
+            'Combina la masa nixtamalizada con flores de Cucurbita pepo ricas en ácido fólico, vitamina A y antioxidantes.'
+    },
+    {
+        id: 'quesadilla_huitlacoche',
+        nombre: 'Quesadilla Gourmet de Huitlacoche y Epazote',
+        icono: '🍄',
+        requiereHuitlacoche: true,
+        explicacionCientifica:
+            'El huitlacoche (Ustilago maydis) enriquece el maíz con lisina, betaglucanos y sabor umami terroso: ejemplo único de micología gastronómica mexicana.'
     },
     {
         id: 'plato_tres_hermanas',
@@ -84,16 +99,14 @@ export const RECETAS_MILPA: RecetaTradicional[] = [
         requiereFrijol: true,
         requiereCalabaza: true,
         explicacionCientifica:
-            'Sinergia nutricional completa: el maíz aporta metionina y el frijol aporta lisina y triptófano, formando una proteína vegetal de alto valor biológico.'
+            'Sinergia nutricional completa: el maíz aporta metionina y el frijol ayocote aporta lisina y triptófano, formando una proteína vegetal completa.'
     }
 ];
 
 /**
- * M8: Del Surco al Comal — Fogón de Cocina Tradicional 3D
- * Estación culinaria interactiva junto al cobertizo (x = 2.8, z = -3.4) con:
- * - Olla de barro para Nixtamalización
- * - Metate de piedra volcánica para molienda
- * - Comal de barro sobre brasas para cocción
+ * M8: Del Surco al Comal — Fogón de Cocina Tradicional 3D (v4.1)
+ * - Consume mazorcas cosechadas reales conservando su variedad y madurez (afinidad real).
+ * - Consume ingredientes asociados (quelite, frijol, calabaza, huitlacoche) y persiste recetas descubiertas.
  */
 export class FogonCocina {
     private scene: Scene;
@@ -105,7 +118,8 @@ export class FogonCocina {
     public etapa: EtapaCocina = 'ESPERA';
     public recetaSeleccionada: RecetaTradicional = RECETAS_MILPA[0];
     public calidadMazorcaActual: number = 0.85;
-    public variedadMazorcaActual: string = 'Maíz Criollo';
+    public variedadMazorcaActual: TipoSemilla = 'chalqueno';
+    public madurezMazorcaActual: 'elote' | 'grano_seco' = 'elote';
     public platosPreparados: string[] = [];
 
     private masaMesh!: Mesh;
@@ -113,7 +127,20 @@ export class FogonCocina {
     private modalEl: HTMLDivElement | null = null;
 
     public onMensajeToast?: (msg: string) => void;
-    public onConsumirMazorcaAlmacen?: () => { exito: boolean; calidad: number };
+    public onConsumirMazorcaAlmacen?: (variedadPreferida?: string) => {
+        exito: boolean;
+        variedad?: string;
+        calidad: number;
+        madurez?: 'elote' | 'grano_seco';
+    };
+    public onContarDespensa?: () => {
+        mazorcas: number;
+        quelites: number;
+        frijol: number;
+        calabaza: number;
+        huitlacoche: number;
+    };
+    public onConsumirIngrediente?: (tipo: 'quelite' | 'frijol' | 'calabaza' | 'huitlacoche') => boolean;
 
     constructor(
         scene: Scene,
@@ -127,17 +154,36 @@ export class FogonCocina {
         this.bus = bus;
 
         this.raiz = new TransformNode('fogonCocinaRoot', this.scene);
-        this.raiz.position.set(2.8, 0, -3.4);
+        this.raiz.position.set(3.05, 0, -3.4); // Desplazado +0.25m al este para paso limpio junto al cobertizo
         this.raiz.computeWorldMatrix(true);
 
         this.construirEstacion3D();
         this.construirModalUI();
     }
 
+    public reiniciar(): void {
+        this.etapa = 'ESPERA';
+        this.platosPreparados = [];
+        this.masaMesh.setEnabled(false);
+        this.tortillaComalMesh.setEnabled(false);
+        this.actualizarModalUI();
+    }
+
+    public exportarPlatos(): string[] {
+        return [...this.platosPreparados];
+    }
+
+    public restaurarPlatos(platos?: string[] | null): void {
+        this.etapa = 'ESPERA';
+        this.platosPreparados = Array.isArray(platos) ? [...platos] : [];
+        this.masaMesh.setEnabled(false);
+        this.tortillaComalMesh.setEnabled(false);
+        this.actualizarModalUI();
+    }
+
     private construirEstacion3D(): void {
         const colorContorno = Color3.FromHexString('#25330f');
 
-        // Mesa rústica de piedra/adobe pixel-art para el fogón
         const matAdobe = new StandardMaterial('matAdobeFogon', this.scene);
         matAdobe.diffuseTexture = crearTexPiedraPixel(this.scene, 2, 1);
         matAdobe.diffuseColor = Color3.FromHexString('#d6bfa9');
@@ -194,7 +240,6 @@ export class FogonCocina {
         metate.parent = this.raiz;
         this.registrarClick(metate, () => this.avanzarPasoInteractivo());
 
-        // Bola de masa nixtamalizada sobre el metate
         const matMasa = new StandardMaterial('matMasaMaiz', this.scene);
         matMasa.diffuseColor = Color3.FromHexString('#fff59d');
         matMasa.emissiveColor = Color3.FromHexString('#fff59d').scale(0.4);
@@ -210,13 +255,27 @@ export class FogonCocina {
         this.masaMesh.parent = this.raiz;
         this.masaMesh.setEnabled(false);
 
-        // 3. Comal de barro sobre brasas (derecha)
+        // 3. Brasas encendidas + Comal de barro (derecha)
+        const matBrasas = new StandardMaterial('matBrasasFogon', this.scene);
+        matBrasas.diffuseColor = Color3.FromHexString('#ea580c');
+        matBrasas.emissiveColor = Color3.FromHexString('#f97316').scale(0.95);
+        matBrasas.specularColor = Color3.Black();
+        matBrasas.metadata = { esEmisivoReal: true };
+        const brasas = MeshBuilder.CreateCylinder(
+            'fogonBrasas',
+            { height: 0.03, diameter: 0.34, tessellation: 10 },
+            this.scene
+        );
+        brasas.position.set(0.46, 0.795, 0);
+        brasas.material = matBrasas;
+        brasas.parent = this.raiz;
+
         const comal = MeshBuilder.CreateCylinder(
             'fogonComal',
             { height: 0.025, diameter: 0.44, tessellation: 14 },
             this.scene
         );
-        comal.position.set(0.46, 0.82, 0);
+        comal.position.set(0.46, 0.825, 0);
         comal.material = matPiedra;
         comal.renderOutline = true;
         comal.outlineColor = colorContorno;
@@ -229,7 +288,7 @@ export class FogonCocina {
             { height: 0.015, diameter: 0.22, tessellation: 12 },
             this.scene
         );
-        this.tortillaComalMesh.position.set(0.46, 0.84, 0);
+        this.tortillaComalMesh.position.set(0.46, 0.845, 0);
         this.tortillaComalMesh.material = matMasa;
         this.tortillaComalMesh.parent = this.raiz;
         this.tortillaComalMesh.setEnabled(false);
@@ -243,37 +302,77 @@ export class FogonCocina {
         );
     }
 
+    private normalizarVariedad(raw?: string): TipoSemilla {
+        const s = (raw || '').toLowerCase();
+        if (s.includes('azul')) return 'azul';
+        if (s.includes('rojo') || s.includes('sangre')) return 'rojo';
+        if (s.includes('palomero')) return 'palomero';
+        return 'chalqueno';
+    }
+
+    private obtenerDespensa() {
+        if (this.onContarDespensa) return this.onContarDespensa();
+        return {
+            mazorcas: this.canasta?.totalCosechados ?? 0,
+            quelites: this.canasta?.quelites ?? 0,
+            frijol: this.canasta?.frijol ?? 0,
+            calabaza: this.canasta?.calabaza ?? 0,
+            huitlacoche: 0
+        };
+    }
+
     /**
      * Avanza un paso en la máquina de estados culinaria:
-     * ESPERA -> NIXTAMAL -> MOLIENDA -> FORMADO -> COMAL -> LISTO
+     * ESPERA -> NIXTAMAL -> MOLIENDA -> FORMADO -> COMAL -> ESPERA (platillo servido)
      */
     public avanzarPasoInteractivo(): { exito: boolean; mensaje: string } {
         const posAudio = this.raiz.position;
 
         if (this.etapa === 'ESPERA') {
-            // Intentar tomar mazorca de la canasta, luego del Almacén/Troje, o usar grano de reserva educativa
-            const tieneMazorca = this.canasta ? this.canasta.retirarMazorca() : false;
-            if (tieneMazorca && this.canasta) {
-                this.variedadMazorcaActual = 'Maíz Cosechado en Mano';
-                this.calidadMazorcaActual = this.canasta.calidadPromedio;
-            } else if (this.onConsumirMazorcaAlmacen) {
-                const delAlmacen = this.onConsumirMazorcaAlmacen();
-                if (delAlmacen.exito) {
-                    this.variedadMazorcaActual = 'Maíz de tu Troje / Almacén';
-                    this.calidadMazorcaActual = delAlmacen.calidad;
-                } else {
-                    this.variedadMazorcaActual = 'Maíz Criollo de Reserva';
-                    this.calidadMazorcaActual = 0.82;
-                }
-            } else {
-                this.variedadMazorcaActual = 'Maíz Criollo de Reserva';
-                this.calidadMazorcaActual = 0.82;
+            const desp = this.obtenerDespensa();
+            const rec = this.recetaSeleccionada;
+
+            // Validar ingredientes especiales requeridos antes de consumir la mazorca
+            if (rec.requiereHuitlacoche && desp.huitlacoche <= 0) {
+                const msg = '🍄 Necesitas Huitlacoche cosechado (surge en floración con alta humedad relativa) para esta quesadilla.';
+                if (this.onMensajeToast) this.onMensajeToast(msg);
+                return { exito: false, mensaje: msg };
             }
+
+            // Consumir mazorca cosechada real (priorizando la raza preferida de la receta)
+            let obtenida = false;
+            if (this.onConsumirMazorcaAlmacen) {
+                const res = this.onConsumirMazorcaAlmacen(rec.razaPreferida);
+                if (res.exito) {
+                    obtenida = true;
+                    this.variedadMazorcaActual = this.normalizarVariedad(res.variedad);
+                    this.calidadMazorcaActual = res.calidad;
+                    this.madurezMazorcaActual = res.madurez ?? 'elote';
+                }
+            } else if (this.canasta && this.canasta.retirarMazorca()) {
+                obtenida = true;
+                this.variedadMazorcaActual = 'chalqueno';
+                this.calidadMazorcaActual = this.canasta.calidadPromedio;
+                this.madurezMazorcaActual = 'elote';
+            }
+
+            if (!obtenida) {
+                const msg = '🌽 Necesitas cosechar al menos 1 mazorca real en la milpa antes de encender el Fogón.';
+                if (this.onMensajeToast) this.onMensajeToast(msg);
+                return { exito: false, mensaje: msg };
+            }
+
+            // Consumir ingredientes complementarios si están disponibles
+            if (rec.requiereQuelite) this.onConsumirIngrediente?.('quelite');
+            if (rec.requiereFrijol) this.onConsumirIngrediente?.('frijol');
+            if (rec.requiereCalabaza) this.onConsumirIngrediente?.('calabaza');
+            if (rec.requiereHuitlacoche) this.onConsumirIngrediente?.('huitlacoche');
 
             this.etapa = 'NIXTAMAL';
             this.audio.regarAgua(posAudio);
             this.actualizarModalUI();
-            const msg = `🏺 Paso 1 (Nixtamalización): Cociendo granos de ${this.variedadMazorcaActual} en agua con cal viva (Ca(OH)₂).`;
+            const nomVar = VARIEDADES_MAIZ[this.variedadMazorcaActual].nombre;
+            const msg = `🏺 Paso 1 (Nixtamalización): Cociendo ${nomVar} (${this.madurezMazorcaActual === 'grano_seco' ? 'grano seco R6' : 'elote tierno R3'}) con agua y cal Ca(OH)₂.`;
             if (this.onMensajeToast) this.onMensajeToast(msg);
             return { exito: true, mensaje: msg };
         }
@@ -315,10 +414,10 @@ export class FogonCocina {
         }
 
         if (this.etapa === 'COMAL') {
-            this.etapa = 'LISTO';
             this.tortillaComalMesh.setEnabled(false);
             const calidadPlato = this.calcularCalidadPlato();
-            if (!this.platosPreparados.includes(this.recetaSeleccionada.id)) {
+            const esNueva = !this.platosPreparados.includes(this.recetaSeleccionada.id);
+            if (esNueva) {
                 this.platosPreparados.push(this.recetaSeleccionada.id);
             }
             this.audio.cosecharExito(posAudio);
@@ -327,9 +426,8 @@ export class FogonCocina {
                 receta: this.recetaSeleccionada.id,
                 calidad: calidadPlato
             });
-            this.actualizarModalUI();
             const estrellas = '⭐'.repeat(Math.max(1, Math.round(calidadPlato * 5)));
-            const msg = `${this.recetaSeleccionada.icono} ¡Platillo listo! «${this.recetaSeleccionada.nombre}» (${estrellas}) — ${this.recetaSeleccionada.explicacionCientifica}`;
+            const msg = `${this.recetaSeleccionada.icono} ¡Platillo servido! «${this.recetaSeleccionada.nombre}» (${estrellas}) — ${this.recetaSeleccionada.explicacionCientifica}`;
             if (this.onMensajeToast) this.onMensajeToast(msg);
             this.etapa = 'ESPERA';
             this.actualizarModalUI();
@@ -341,22 +439,10 @@ export class FogonCocina {
     }
 
     private calcularCalidadPlato(): number {
-        let afinidadRaza = 0.85;
-        if (
-            this.recetaSeleccionada.razaPreferida &&
-            this.variedadMazorcaActual.toLowerCase().includes(this.recetaSeleccionada.razaPreferida.toLowerCase())
-        ) {
-            afinidadRaza = 1.0;
-        }
-        let bonoIngredientes = 0.85;
-        if (this.canasta) {
-            if (this.recetaSeleccionada.requiereQuelite && this.canasta.quelites > 0) bonoIngredientes = 1.0;
-            if (this.recetaSeleccionada.requiereFrijol && this.canasta.frijol > 0) bonoIngredientes = 1.0;
-            if (this.recetaSeleccionada.requiereCalabaza && this.canasta.calabaza > 0) bonoIngredientes = 1.0;
-        }
-        return clamp01(
-            0.5 * this.calidadMazorcaActual + 0.3 * afinidadRaza + 0.2 * bonoIngredientes
-        );
+        const rec = this.recetaSeleccionada;
+        const afinidadRaza = !rec.razaPreferida || this.variedadMazorcaActual === rec.razaPreferida ? 1.0 : 0.78;
+        const afinidadMadurez = !rec.madurezPreferida || this.madurezMazorcaActual === rec.madurezPreferida ? 1.0 : 0.85;
+        return clamp01(0.5 * this.calidadMazorcaActual + 0.3 * afinidadRaza + 0.2 * afinidadMadurez);
     }
 
     private construirModalUI(): void {
@@ -367,7 +453,7 @@ export class FogonCocina {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(28, 17, 10, 0.96); color: #fef3c7;
             border: 4px solid; border-color: #fbbf24 #78350f #78350f #fbbf24;
-            border-radius: 0; padding: 20px 24px; width: min(500px, 94vw); z-index: 2500;
+            border-radius: 0; padding: 20px 24px; width: min(540px, 95vw); max-height: 88vh; overflow-y: auto; z-index: 2800;
             font-family: var(--fuente-px); display: none;
             box-shadow: 0 0 0 4px #000000;
         `;
@@ -386,10 +472,8 @@ export class FogonCocina {
     public actualizarModalUI(): void {
         if (!this.modalEl) return;
 
-        const mazorcasCanasta = this.canasta ? this.canasta.totalCosechados : 0;
-        const quelites = this.canasta ? this.canasta.quelites : 0;
-        const frijol = this.canasta ? this.canasta.frijol : 0;
-        const calabaza = this.canasta ? this.canasta.calabaza : 0;
+        const d = this.obtenerDespensa();
+        const rec = this.recetaSeleccionada;
 
         const etiquetasPasos: Record<EtapaCocina, string> = {
             ESPERA: '🏺 1. Nixtamalizar Grano en Olla de Barro',
@@ -400,28 +484,37 @@ export class FogonCocina {
             LISTO: '✨ ¡Platillo Servido! Iniciar Otro'
         };
 
-        const opcionesRecetas = RECETAS_MILPA.map(
-            (r) =>
-                `<option value="${r.id}" ${r.id === this.recetaSeleccionada.id ? 'selected' : ''}>${r.icono} ${r.nombre}</option>`
-        ).join('');
+        const opcionesRecetas = RECETAS_MILPA.map((r) => {
+            const hecha = this.platosPreparados.includes(r.id) ? ' ✓' : '';
+            return `<option value="${r.id}" ${r.id === rec.id ? 'selected' : ''}>${r.icono} ${r.nombre}${hecha}</option>`;
+        }).join('');
+
+        const reqs: string[] = [];
+        if (rec.razaPreferida) reqs.push(`Raza ideal: <b>${VARIEDADES_MAIZ[rec.razaPreferida].nombre}</b>`);
+        if (rec.madurezPreferida) reqs.push(`Punto ideal: <b>${rec.madurezPreferida === 'grano_seco' ? 'Grano Seco (R6)' : 'Elote Tierno (R3)'}</b>`);
+        if (rec.requiereQuelite) reqs.push('🌿 Quelites');
+        if (rec.requiereFrijol) reqs.push('🫘 Frijol Ayocote');
+        if (rec.requiereCalabaza) reqs.push('🎃 Calabaza / Flor');
+        if (rec.requiereHuitlacoche) reqs.push('🍄 Huitlacoche (obligatorio)');
 
         this.modalEl.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:2px solid #78350f;padding-bottom:6px;">
-                <h3 style="margin:0;color:#fbbf24;font-size:1.15rem;">🔥 Fogón Tradicional: Del Surco al Comal</h3>
+                <h3 style="margin:0;color:#fbbf24;font-size:1.12rem;">🔥 Fogón Tradicional: Del Surco al Comal</h3>
                 <button id="btnCerrarFogon" style="background:#dc2626;border:2px solid;border-color:#fca5a5 #7f1d1d #7f1d1d #fca5a5;border-radius:0;color:#fff;font-size:1rem;cursor:pointer;padding:2px 8px;font-weight:700;">✕</button>
             </div>
-            <div style="font-size:0.85rem;background:rgba(255,255,255,0.07);border:2px solid #78350f;padding:8px 12px;border-radius:0;margin-bottom:12px;">
-                🧺 <b>Despensa de tu Canasta:</b> 🌽 ${mazorcasCanasta} Mazorcas | 🌿 ${quelites} Quelites | 🫘 ${frijol} Frijol | 🎃 ${calabaza} Calabaza
+            <div style="font-size:0.82rem;background:rgba(255,255,255,0.07);border:2px solid #78350f;padding:8px 12px;border-radius:0;margin-bottom:10px;">
+                🧺 <b>Despensa Disponible:</b> 🌽 ${d.mazorcas} Mazorcas · 🌿 ${d.quelites} Quelites · 🫘 ${d.frijol} Frijol · 🎃 ${d.calabaza} Calabaza · 🍄 ${d.huitlacoche} Huitlacoche
             </div>
-            <label style="display:block;font-size:0.88rem;margin-bottom:6px;color:#fcd34d;">Selecciona Receta Tradicional:</label>
-            <select id="selRecetaFogon" style="width:100%;padding:8px;border-radius:0;background:#291d12;color:#fef3c7;border:2px solid #d97706;margin-bottom:12px;font-size:0.92rem;font-family:var(--fuente-px);">
+            <label style="display:block;font-size:0.85rem;margin-bottom:5px;color:#fcd34d;">Selecciona Receta Tradicional:</label>
+            <select id="selRecetaFogon" style="width:100%;padding:8px;border-radius:0;background:#291d12;color:#fef3c7;border:2px solid #d97706;margin-bottom:8px;font-size:0.9rem;font-family:var(--fuente-px);">
                 ${opcionesRecetas}
             </select>
-            <div style="font-size:0.85rem;line-height:1.4;color:#fde68a;background:rgba(245,158,11,0.14);border:2px solid rgba(245,158,11,0.45);padding:10px;border-radius:0;margin-bottom:14px;">
-                🔬 <b>Ciencia Culinaria:</b> ${this.recetaSeleccionada.explicacionCientifica}
+            ${reqs.length > 0 ? `<div style="font-size:0.78rem;color:#fed7aa;margin-bottom:8px;">📋 ${reqs.join(' · ')}</div>` : ''}
+            <div style="font-size:0.83rem;line-height:1.4;color:#fde68a;background:rgba(245,158,11,0.14);border:2px solid rgba(245,158,11,0.45);padding:10px;border-radius:0;margin-bottom:14px;">
+                🔬 <b>Ciencia Culinaria:</b> ${rec.explicacionCientifica}
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-                <span style="font-size:0.82rem;color:#d97706;">Estado: <b>${this.etapa}</b> (${this.platosPreparados.length}/7 recetas descubiertas)</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="font-size:0.82rem;color:#d97706;">Paso: <b>${this.etapa}</b> (${this.platosPreparados.length}/${RECETAS_MILPA.length} platillos)</span>
                 <button id="btnPasoFogon" style="padding:10px 16px;border-radius:0;border:2px solid;border-color:#fef08a #92400e #92400e #fef08a;background:#f59e0b;color:#1c1917;font-weight:700;cursor:pointer;font-family:var(--fuente-px);">
                     ${etiquetasPasos[this.etapa]}
                 </button>
@@ -434,9 +527,9 @@ export class FogonCocina {
 
         this.modalEl.querySelector('#selRecetaFogon')?.addEventListener('change', (e) => {
             const val = (e.target as HTMLSelectElement).value;
-            const rec = RECETAS_MILPA.find((r) => r.id === val);
-            if (rec) {
-                this.recetaSeleccionada = rec;
+            const nuevaRec = RECETAS_MILPA.find((r) => r.id === val);
+            if (nuevaRec) {
+                this.recetaSeleccionada = nuevaRec;
                 this.actualizarModalUI();
             }
         });

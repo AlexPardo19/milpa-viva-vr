@@ -12,7 +12,8 @@ import { SurcoMilpa } from '../surco_milpa';
 import { AudioSintetizador } from '../audio_sintetizador';
 import { BusEventos } from './bus_eventos';
 import { ManoVR } from '../vr/mano_vr';
-import { clamp01 } from './util';
+import { clamp01, crearRng } from './util';
+import { CFG, Etapa, etapaDe, VARIEDADES_MAIZ } from '../nucleo';
 
 export type TipoFauna = 'larva' | 'ave' | 'abeja' | 'catarina';
 export type EstadoFauna = 'INACTIVO' | 'LLEGANDO' | 'ACTUANDO' | 'HUYENDO';
@@ -53,6 +54,8 @@ export class FaunaMilpa {
     private tiempoTotal = 0;
     private tiempoUltimaLarva = -30;
     private cooldownLarvaNodo = new Map<number, number>();
+    public dificultad: 'tranquilo' | 'normal' | 'extremo' = 'normal';
+    private rng: () => number = () => Math.random();
 
     public onMensajeToast?: (msg: string) => void;
 
@@ -63,6 +66,47 @@ export class FaunaMilpa {
         this.bus = bus;
 
         this.inicializarPool();
+    }
+
+    public configurarMundo(dificultad: 'tranquilo' | 'normal' | 'extremo', semillaStr?: string): void {
+        this.dificultad = dificultad;
+        if (semillaStr) {
+            let h = 2166136261;
+            for (let i = 0; i < semillaStr.length; i++) {
+                h ^= semillaStr.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            this.rng = crearRng((h >>> 0) + 17);
+        }
+        if (dificultad === 'tranquilo') {
+            for (const ag of this.pool) {
+                if (ag.tipo === 'larva' || ag.tipo === 'ave') {
+                    ag.estado = 'INACTIVO';
+                    ag.raiz.setEnabled(false);
+                }
+            }
+        }
+    }
+
+    public reiniciar(): void {
+        this.timerSpawn = 0;
+        this.timerSonido = 0;
+        this.tiempoTotal = 0;
+        this.tiempoUltimaLarva = -30;
+        this.cooldownLarvaNodo.clear();
+        for (const ag of this.pool) {
+            ag.estado = 'INACTIVO';
+            ag.raiz.setEnabled(false);
+        }
+    }
+
+    public interactuarPorMeshName(meshName: string): boolean {
+        const m = meshName.match(/(?:larvaSeg|larvaCab|larvaBanda|larvaMand|larvaOjo|aveCuerpo|aveAla|avePico|abejaCuerpo|abejaFranja|abejaAla|catarina|catCab|catPunto)_(\d+)/);
+        if (!m) return false;
+        const id = parseInt(m[1], 10);
+        if (isNaN(id) || !this.pool[id]) return false;
+        this.interactuarConAgente(id);
+        return true;
     }
 
     private inicializarPool(): void {
@@ -209,6 +253,7 @@ export class FaunaMilpa {
                 ala.material = mat;
                 ala.parent = raiz;
                 aplicarContorno(ala);
+                this.registrarClickAgente(ala, id);
             }
 
             const matPico = new StandardMaterial(`matPico_${id}`, this.scene);
@@ -225,6 +270,7 @@ export class FaunaMilpa {
             pico.parent = raiz;
             aplicarContorno(pico);
             this.registrarClickAgente(cuerpo, id);
+            this.registrarClickAgente(pico, id);
         } else if (tipo === 'abeja') {
             mat.diffuseColor = Color3.FromHexString('#fbbf24');
             mat.emissiveColor = Color3.FromHexString('#d97706').scale(0.3);
@@ -334,19 +380,25 @@ export class FaunaMilpa {
         const nodo = this.surco.nodos[ag.nodoObjetivo];
 
         if (ag.tipo === 'larva') {
+            ag.destino.copyFrom(ag.posicion);
             ag.estado = 'HUYENDO';
             ag.progreso = 0;
             if (nodo) {
                 nodo.plaga = Math.max(0, nodo.plaga - 35);
+                this.surco.actualizarLetrero(ag.nodoObjetivo);
             }
             this.audio.clickUI();
             this.bus.emitir({ t: 'plaga', nodo: ag.nodoObjetivo, tipo: 'cogollero', resuelta: true });
             if (this.onMensajeToast) {
-                this.onMensajeToast(`🐛 ¡Retiraste al gusano cogollero de la Estación #${ag.nodoObjetivo + 1}!`);
+                const etapaN = nodo ? etapaDe(nodo.plantaInterna.gdd, CFG, VARIEDADES_MAIZ[nodo.variedad]) : Etapa.V6;
+                const nombrePlaga = etapaN >= Etapa.R1 ? 'gusano elotero (Helicoverpa zea)' : 'gusano cogollero (Spodoptera frugiperda)';
+                this.onMensajeToast(`🐛 ¡Retiraste al ${nombrePlaga} de la Estación #${ag.nodoObjetivo + 1}!`);
             }
         } else if (ag.tipo === 'ave') {
+            ag.destino.copyFrom(ag.posicion);
             ag.estado = 'HUYENDO';
             ag.progreso = 0;
+            if (nodo) this.surco.actualizarLetrero(ag.nodoObjetivo);
             this.audio.palmada(ag.posicion);
             this.bus.emitir({ t: 'plaga', nodo: ag.nodoObjetivo, tipo: 'ave', resuelta: true });
             if (this.onMensajeToast) {
@@ -354,6 +406,7 @@ export class FaunaMilpa {
             }
         } else if (ag.tipo === 'abeja' || ag.tipo === 'catarina') {
             if (golpeBrusco) {
+                ag.destino.copyFrom(ag.posicion);
                 ag.estado = 'HUYENDO';
                 ag.progreso = 0;
                 if (this.onMensajeToast) {
@@ -363,8 +416,8 @@ export class FaunaMilpa {
                 if (this.onMensajeToast) {
                     const desc =
                         ag.tipo === 'abeja'
-                            ? '🐝 Abeja nativa: poliniza las flores de calabaza y el maíz.'
-                            : '🐞 Catarina aliada: protege la milpa comiéndose al gusano cogollero.';
+                            ? '🐝 Abeja nativa (Meliponini): poliniza las flores de calabaza y refuerza el cuajado del maíz en floración.'
+                            : '🐞 Catarina aliada (Hippodamia convergens): control biológico natural que depreda larvas de cogollero.';
                     this.onMensajeToast(desc);
                 }
             }
@@ -398,6 +451,7 @@ export class FaunaMilpa {
         }
 
         if (retirados > 0) {
+            this.surco.actualizarLetrero(nodoId);
             const msg = `🛡️ Estación #${nodoId + 1} protegida contra plagas (nivel de plaga: ${Math.round(nodo.plaga)}%).`;
             if (this.onMensajeToast) this.onMensajeToast(msg);
             return { exito: true, mensaje: msg };
@@ -504,25 +558,32 @@ export class FaunaMilpa {
                     } else if (ag.tipo === 'ave') {
                         // Verificar si Don Elote está cerca (radio 2.6 m)
                         if (Vector3.Distance(nodo.posicionMundo, this.POS_DON_ELOTE) < this.RADIO_ESPANTAPAJAROS) {
+                            ag.destino.copyFrom(ag.posicion);
                             ag.estado = 'HUYENDO';
                             ag.progreso = 0;
                         } else {
                             nodo.plaga = Math.min(100, nodo.plaga + 1.4 * dt);
                         }
                     } else if (ag.tipo === 'abeja') {
-                        nodo.polinizacion = clamp01(nodo.polinizacion + 0.035 * dt);
-                        nodo.plantaInterna.cuajado = Math.max(
-                            nodo.plantaInterna.cuajado,
-                            clamp01(0.45 + 0.55 * nodo.polinizacion)
-                        );
+                        // Las abejas refuerzan el cuajado cuando el maíz está en ventana floral VT..R2
+                        const etapaAbeja = etapaDe(nodo.plantaInterna.gdd, CFG, VARIEDADES_MAIZ[nodo.variedad]);
+                        if (etapaAbeja >= Etapa.VT && etapaAbeja <= Etapa.R2) {
+                            nodo.polinizacion = clamp01(nodo.polinizacion + 0.035 * dt);
+                            nodo.plantaInterna.cuajado = Math.max(
+                                nodo.plantaInterna.cuajado,
+                                clamp01(0.38 + 0.62 * nodo.polinizacion)
+                            );
+                        }
                     } else if (ag.tipo === 'catarina') {
                         nodo.plaga = Math.max(0, nodo.plaga - 5.0 * dt);
-                        // Si hay una larva en este nodo, ahuyentarla
+                        // Si hay una larva en este nodo, ahuyentarla y depredarla
                         for (let k = 0; k < this.pool.length; k++) {
                             const otro = this.pool[k];
                             if (otro.tipo === 'larva' && otro.estado === 'ACTUANDO' && otro.nodoObjetivo === ag.nodoObjetivo) {
+                                otro.destino.copyFrom(otro.posicion);
                                 otro.estado = 'HUYENDO';
                                 otro.progreso = 0;
+                                this.bus.emitir({ t: 'plaga', nodo: ag.nodoObjetivo, tipo: 'cogollero', resuelta: true });
                             }
                         }
                     }
@@ -533,6 +594,7 @@ export class FaunaMilpa {
 
                 // Retirada natural tras 18 segundos
                 if (ag.tiempoEstado > 18) {
+                    ag.destino.copyFrom(ag.posicion);
                     ag.estado = 'HUYENDO';
                     ag.progreso = 0;
                 }
@@ -591,44 +653,70 @@ export class FaunaMilpa {
     }
 
     private intentarSpawn(): void {
-        // Buscar únicamente nodos con plantas vivas y no cosechadas
+        // Buscar únicamente nodos con plantas vivas, emergidas y no cosechadas
         const sembrados = this.surco.nodos.filter(
             (n) =>
                 n.sembrada &&
                 !n.cosechada &&
                 n.plantaInterna.estado !== 'MUERTA' &&
+                n.plantaInterna.estado !== 'SEMILLA' &&
                 !n.estadoCrec.estaMuerta &&
                 n.diasCultivo >= 15
         );
         if (sembrados.length === 0) return;
 
-        const nodo = sembrados[Math.floor(Math.random() * sembrados.length)];
+        const nodo = sembrados[Math.floor(this.rng() * sembrados.length)];
         const dia = nodo.diasCultivo;
+        const etapa = etapaDe(nodo.plantaInterna.gdd, CFG, VARIEDADES_MAIZ[nodo.variedad]);
+        const tieneTriada = nodo.frijolVid > 0.2 || nodo.calabazaCobertura > 0.2;
+        const factorPlagaDif = this.dificultad === 'tranquilo' ? 0 : this.dificultad === 'extremo' ? 1.65 : 1.0;
 
-        // Elegir qué tipo de agente activar según la fenología y asociación Milpa
+        // Selección ponderada real: garantiza aparición de catarinas cuando hay plaga/tríada y no anula plagas al 100%
         let candidato: AgenteFauna | undefined;
-        if (nodo.frijolVid > 0.2 || nodo.calabazaCobertura > 0.2) {
-            candidato = this.pool.find(
-                (a) => a.estado === 'INACTIVO' && (a.tipo === 'abeja' || a.tipo === 'catarina')
-            );
-        }
-        if (!candidato && dia >= 100 && Vector3.Distance(nodo.posicionMundo, this.POS_DON_ELOTE) >= this.RADIO_ESPANTAPAJAROS) {
-            candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'ave');
-        }
-        if (!candidato && dia >= 22) {
-            const larvaeActivas = this.pool.filter((a) => a.tipo === 'larva' && a.estado !== 'INACTIVO').length;
-            const ultimaEnNodo = this.cooldownLarvaNodo.get(nodo.id) ?? -999;
-            const puedeLarva =
-                larvaeActivas < 1 &&
-                this.tiempoTotal - this.tiempoUltimaLarva >= 34.0 &&
-                this.tiempoTotal - ultimaEnNodo >= 75.0 &&
-                Math.random() < 0.32;
+        const hayLarvaEnNodo = this.pool.some((a) => a.tipo === 'larva' && a.estado !== 'INACTIVO' && a.nodoObjetivo === nodo.id);
 
-            if (puedeLarva) {
-                candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'larva');
+        // 1. Si hay plaga activa o tríada floreciendo, dar prioridad real a la Catarina aliada (corrige inanición de spawn)
+        if ((nodo.plaga > 12 || hayLarvaEnNodo) && this.rng() < (tieneTriada ? 0.72 : 0.45)) {
+            candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'catarina');
+        }
+
+        // 2. Plagas dependientes de dificultad (reducidas a la mitad con Tríada, no anuladas por completo)
+        if (!candidato && factorPlagaDif > 0) {
+            const factorTriadaPlaga = tieneTriada ? 0.55 : 1.0;
+            if (
+                etapa >= Etapa.R2 &&
+                Vector3.Distance(nodo.posicionMundo, this.POS_DON_ELOTE) >= this.RADIO_ESPANTAPAJAROS &&
+                this.rng() < 0.35 * factorPlagaDif * factorTriadaPlaga
+            ) {
+                candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'ave');
             }
+            if (!candidato && dia >= 20) {
+                const larvaeActivas = this.pool.filter((a) => a.tipo === 'larva' && a.estado !== 'INACTIVO').length;
+                const ultimaEnNodo = this.cooldownLarvaNodo.get(nodo.id) ?? -999;
+                const maxLarvas = this.dificultad === 'extremo' ? 2 : 1;
+                const cooldownGlobal = this.dificultad === 'extremo' ? 20.0 : 34.0;
+                const puedeLarva =
+                    larvaeActivas < maxLarvas &&
+                    this.tiempoTotal - this.tiempoUltimaLarva >= cooldownGlobal &&
+                    this.tiempoTotal - ultimaEnNodo >= 60.0 &&
+                    this.rng() < 0.34 * factorPlagaDif * factorTriadaPlaga;
+
+                if (puedeLarva) {
+                    candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'larva');
+                }
+            }
+        }
+
+        // 3. Aliados biológicos (alternando Abeja y Catarina con peso real)
+        if (!candidato) {
+            const prefiereCatarina = tieneTriada ? this.rng() < 0.42 : this.rng() < 0.28;
+            candidato = this.pool.find(
+                (a) => a.estado === 'INACTIVO' && a.tipo === (prefiereCatarina ? 'catarina' : 'abeja')
+            );
             if (!candidato) {
-                candidato = this.pool.find((a) => a.estado === 'INACTIVO' && a.tipo === 'abeja');
+                candidato = this.pool.find(
+                    (a) => a.estado === 'INACTIVO' && (a.tipo === 'abeja' || a.tipo === 'catarina')
+                );
             }
         }
 
@@ -643,7 +731,7 @@ export class FaunaMilpa {
         candidato.nodoObjetivo = nodo.id;
         candidato.progreso = 0;
         candidato.tiempoEstado = 0;
-        candidato.origen.set(nodo.posicionMundo.x + (Math.random() - 0.5) * 3, 2.4, -3.2);
+        candidato.origen.set(nodo.posicionMundo.x + (this.rng() - 0.5) * 3, 2.4, -3.2);
         candidato.destino.copyFrom(nodo.posicionMundo);
         candidato.destino.y = 0.85;
         candidato.raiz.position.copyFrom(candidato.origen);

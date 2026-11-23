@@ -37,6 +37,7 @@ export class CanastaRecoleccion3D {
   
   // Mazorcas recolectadas físicamente apiladas
   private elotesRecolectados: Mesh[] = [];
+  private matCobPool: Map<string, StandardMaterial> = new Map();
   public totalCosechados = 0;
   public conteoPorVariedad: Record<string, number> = {
     chalqueno: 0,
@@ -49,6 +50,7 @@ export class CanastaRecoleccion3D {
   public quelites = 0;
   public frijol = 0;
   public calabaza = 0;
+  public huitlacoche = 0;
   public calidadesRecolectadas: number[] = [];
 
   constructor(scene: Scene, parent: TransformNode | null = null) {
@@ -60,6 +62,37 @@ export class CanastaRecoleccion3D {
 
     this.construirCanasta();
     this.construirBadge();
+  }
+
+  private obtenerMatCob(variedad: VariedadMaizConfig): StandardMaterial {
+    let mat = this.matCobPool.get(variedad.tipo);
+    if (!mat) {
+      mat = new StandardMaterial(`cobBasketMat_${variedad.tipo}`, this.scene);
+      mat.diffuseColor = Color3.FromHexString(variedad.colorHex);
+      mat.emissiveColor = Color3.FromHexString(variedad.colorHex).scale(0.32);
+      mat.specularColor = new Color3(0.08, 0.08, 0.08);
+      this.matCobPool.set(variedad.tipo, mat);
+    }
+    return mat;
+  }
+
+  public reiniciar(): void {
+    for (const m of this.elotesRecolectados) {
+      try {
+        m.dispose();
+      } catch {
+        // Ignorar
+      }
+    }
+    this.elotesRecolectados = [];
+    this.totalCosechados = 0;
+    this.conteoPorVariedad = { chalqueno: 0, azul: 0, rojo: 0, palomero: 0 };
+    this.quelites = 0;
+    this.frijol = 0;
+    this.calabaza = 0;
+    this.huitlacoche = 0;
+    this.calidadesRecolectadas = [];
+    this.actualizarBadge();
   }
 
   private construirCanasta(): void {
@@ -139,10 +172,11 @@ export class CanastaRecoleccion3D {
     ctx.fillText(`🟠 Palomero: ${this.conteoPorVariedad.palomero}`, 140, 76);
 
     ctx.fillStyle = "#15803d";
-    ctx.font = "bold 12px 'Pixelify Sans', monospace";
+    ctx.font = "bold 11px 'Pixelify Sans', monospace";
+    const extraHuit = this.huitlacoche > 0 ? ` | 🍄${this.huitlacoche}` : "";
     ctx.fillText(
-      `🌿 Quelites: ${this.quelites} | 🫘 Frijol: ${this.frijol} | 🌼 Calab.: ${this.calabaza}`,
-      10,
+      `🌿${this.quelites} | 🫘${this.frijol} | 🌼${this.calabaza}${extraHuit}`,
+      12,
       102
     );
 
@@ -159,13 +193,32 @@ export class CanastaRecoleccion3D {
   }
 
   /**
-   * Deposita quelites, vainas de frijol o flores/calabacitas en la canasta (M3, M7)
+   * Deposita quelites, vainas de frijol, calabaza o huitlacoche en la canasta (M3, M7)
    */
-  public depositarIngrediente(tipo: "quelite" | "frijol" | "calabaza", cantidad = 1): void {
+  public depositarIngrediente(tipo: "quelite" | "frijol" | "calabaza" | "huitlacoche", cantidad = 1): void {
     if (tipo === "quelite") this.quelites += cantidad;
     else if (tipo === "frijol") this.frijol += cantidad;
     else if (tipo === "calabaza") this.calabaza += cantidad;
+    else if (tipo === "huitlacoche") this.huitlacoche += cantidad;
     this.actualizarBadge();
+  }
+
+  public consumirIngrediente(tipo: "quelite" | "frijol" | "calabaza" | "huitlacoche", cantidad = 1): boolean {
+    if (tipo === "quelite") {
+      if (this.quelites < cantidad) return false;
+      this.quelites -= cantidad;
+    } else if (tipo === "frijol") {
+      if (this.frijol < cantidad) return false;
+      this.frijol -= cantidad;
+    } else if (tipo === "calabaza") {
+      if (this.calabaza < cantidad) return false;
+      this.calabaza -= cantidad;
+    } else if (tipo === "huitlacoche") {
+      if (this.huitlacoche < cantidad) return false;
+      this.huitlacoche -= cantidad;
+    }
+    this.actualizarBadge();
+    return true;
   }
 
   /**
@@ -187,6 +240,7 @@ export class CanastaRecoleccion3D {
     }
     this.totalCosechados = Math.max(0, this.totalCosechados - cantidad);
     for (let i = 0; i < cantidad; i++) {
+      this.calidadesRecolectadas.pop();
       const m = this.elotesRecolectados.pop();
       m?.dispose();
     }
@@ -204,56 +258,61 @@ export class CanastaRecoleccion3D {
       this.conteoPorVariedad[variedad.tipo]++;
     }
 
-    // Crear modelo de elote miniatura apilado en la canasta
-    const cobMat = new StandardMaterial(`cobBasketMat_${this.totalCosechados}`, this.scene);
-    cobMat.diffuseColor = Color3.FromHexString(variedad.colorHex);
-    cobMat.emissiveColor = Color3.FromHexString(variedad.colorHex).scale(0.35);
+    // Limitar la pila visual 3D a 18 mazorcas ordenadas en capas 3x2 dentro de la canasta
+    const idxVisual = this.elotesRecolectados.length;
+    if (idxVisual < 18) {
+      const cobMat = this.obtenerMatCob(variedad);
+      const cobMesh = MeshBuilder.CreateCylinder(`cobBasket_${this.totalCosechados}_${idxVisual}`, {
+        height: 0.22,
+        diameterTop: 0.05,
+        diameterBottom: 0.07,
+        tessellation: 10
+      }, this.scene);
 
-    const cobMesh = MeshBuilder.CreateCylinder(`cobBasket_${this.totalCosechados}`, {
-      height: 0.22,
-      diameterTop: 0.05,
-      diameterBottom: 0.07,
-      tessellation: 12
-    }, this.scene);
+      cobMesh.rotation.z = Math.PI / 2 + (Math.random() - 0.5) * 0.3;
+      cobMesh.rotation.y = (Math.random() - 0.5) * 0.4;
 
-    cobMesh.rotation.z = Math.PI / 2 + (Math.random() - 0.5) * 0.4;
-    cobMesh.rotation.y = (Math.random() - 0.5) * 0.5;
+      const col = idxVisual % 3;
+      const row = Math.floor(idxVisual / 3) % 2;
+      const layer = Math.floor(idxVisual / 6);
+      const offsetX = (col - 1) * 0.12;
+      const offsetZ = (row - 0.5) * 0.11;
+      const targetY = 0.12 + layer * 0.065;
+      const targetPos = new Vector3(offsetX, targetY, offsetZ);
 
-    // Disposición apilada en la canasta
-    const offsetX = ((this.totalCosechados - 1) % 3 - 1) * 0.12;
-    const offsetZ = Math.floor((this.totalCosechados - 1) / 3) * 0.10 - 0.05;
-    const targetY = 0.12 + Math.floor((this.totalCosechados - 1) / 3) * 0.06;
+      if (origen) {
+        cobMesh.position.copyFrom(origen);
+        const destinoMundo = this.root.getAbsolutePosition().add(targetPos);
+        Animation.CreateAndStartAnimation(
+          `flyToBasket_${this.totalCosechados}`,
+          cobMesh,
+          "position",
+          60,
+          28,
+          cobMesh.position,
+          destinoMundo,
+          Animation.ANIMATIONLOOPMODE_CONSTANT,
+          undefined,
+          () => {
+            if (!cobMesh.isDisposed()) {
+              cobMesh.parent = this.root;
+              cobMesh.position.copyFrom(targetPos);
+            }
+          }
+        );
+      } else {
+        cobMesh.position.copyFrom(targetPos);
+        cobMesh.parent = this.root;
+      }
 
-    const targetPos = new Vector3(offsetX, targetY, offsetZ);
+      cobMesh.material = cobMat;
+      cobMesh.renderOutline = true;
+      cobMesh.outlineWidth = 0.012;
+      cobMesh.outlineColor = Color3.FromHexString("#25330f");
 
-    if (origen) {
-      cobMesh.position.copyFrom(origen);
-      Animation.CreateAndStartAnimation(
-        `flyToBasket_${this.totalCosechados}`,
-        cobMesh,
-        "position",
-        60,
-        30,
-        cobMesh.position,
-        this.root.position.add(targetPos),
-        Animation.ANIMATIONLOOPMODE_CONSTANT,
-        undefined,
-        () => {
-          cobMesh.parent = this.root;
-          cobMesh.position.copyFrom(targetPos);
-        }
-      );
-    } else {
-      cobMesh.position.copyFrom(targetPos);
-      cobMesh.parent = this.root;
+      this.elotesRecolectados.push(cobMesh);
     }
 
-    cobMesh.material = cobMat;
-    cobMesh.renderOutline = true;
-    cobMesh.outlineWidth = 0.012;
-    cobMesh.outlineColor = Color3.FromHexString("#25330f");
-
-    this.elotesRecolectados.push(cobMesh);
     this.actualizarBadge();
   }
 }
@@ -272,7 +331,8 @@ export class CarritoAgricola3D {
   constructor(scene: Scene, shadowGen: ShadowGenerator | null = null) {
     this.scene = scene;
     this.root = new TransformNode("carritoAgricolaRoot", scene);
-    this.root.position.set(0, 0, -1.45); // Al frente de las huellas de teletransporte
+    // Posicionada detrás de la línea de teletransporte y libre de la Troje (x=2.65, z=-1.35)
+    this.root.position.set(0, 0, -1.95);
 
     this.construirEstructura(shadowGen);
     this.canasta = new CanastaRecoleccion3D(scene, this.root);
@@ -295,22 +355,25 @@ export class CarritoAgricola3D {
     caja.material = woodMat;
     caja.parent = this.root;
 
-    // Ruedas cuadradas/octogonales voxel en los extremos
+    // 4 ruedas voxel alineadas al eje X de rodamiento (costados frontal y trasero)
     const wheelMat = new StandardMaterial("matRuedaCarro", this.scene);
     wheelMat.diffuseTexture = crearTexMaderaPixel(this.scene, false, 1, 1);
     wheelMat.diffuseColor = Color3.FromHexString("#cfa372");
 
     const posX = [-0.45, 0.45];
+    const posZ = [-0.29, 0.29];
     for (const x of posX) {
-      const rueda = MeshBuilder.CreateBox(`rueda_${x}`, {
-        width: 0.08,
-        height: 0.28,
-        depth: 0.28
-      }, this.scene);
-      rueda.position.set(x, 0.14, 0);
-      rueda.material = wheelMat;
-      rueda.parent = this.root;
-      this.ruedas.push(rueda);
+      for (const z of posZ) {
+        const rueda = MeshBuilder.CreateBox(`rueda_${x}_${z}`, {
+          width: 0.26,
+          height: 0.26,
+          depth: 0.07
+        }, this.scene);
+        rueda.position.set(x, 0.13, z);
+        rueda.material = wheelMat;
+        rueda.parent = this.root;
+        this.ruedas.push(rueda);
+      }
     }
 
     if (shadowGen) {
@@ -323,14 +386,15 @@ export class CarritoAgricola3D {
    */
   public actualizar(dt: number): void {
     const vel = 2.5; // Velocidad de traslación
-    const dx = this.targetX - this.root.position.x;
+    const objetivoAcotado = Math.max(-3.6, Math.min(1.45, this.targetX));
+    const dx = objetivoAcotado - this.root.position.x;
     if (Math.abs(dx) > 0.02) {
       const step = Math.sign(dx) * Math.min(Math.abs(dx), vel * dt);
       this.root.position.x += step;
 
-      // Giro cinemático de ruedas
+      // Giro cinemático de ruedas sobre el eje Z (rodando a lo largo de X)
       for (const rueda of this.ruedas) {
-        rueda.rotation.x += step * 4.0;
+        rueda.rotation.z -= step / 0.13;
       }
     }
   }

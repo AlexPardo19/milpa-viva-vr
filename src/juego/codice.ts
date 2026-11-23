@@ -32,42 +32,42 @@ export const CATALOGO_CODICE_BASE: EntradaCodice[] = [
     {
         id: 'raza_azul',
         categoria: 'Razas Nativas',
-        titulo: 'Maíz Azul Mixteco (Antocianinas)',
+        titulo: 'Maíz Azul Cónico (Antocianinas de Alta Montaña)',
         icono: '🫐',
-        resumen: 'Sus granos contienen cianidina-3-glucósido, un antioxidante natural que protege del frío y la radiación UV.',
+        resumen: 'Originario del Eje Neovolcánico (2,200–3,000 msnm). Sus granos contienen cianidina-3-glucósido que protege del frío extremo (-5 °C) y la radiación UV.',
         desbloqueada: false
     },
     {
         id: 'raza_rojo',
         categoria: 'Razas Nativas',
-        titulo: 'Maíz Rojo Sangre de Cristo',
+        titulo: 'Maíz Rojo Sangre de Cristo (Cónico Norteño)',
         icono: '❤️',
-        resumen: 'Pigmentación intensa en pericarpio y aleurona; muy apreciado en ceremonias de bendición de semillas.',
+        resumen: 'Campeón del secano (PMP 8.5% VWC) con flavonoides protectores en pericarpio; muy apreciado en tamales, atoles y bendición de semillas.',
         desbloqueada: false
     },
     {
         id: 'raza_palomero',
         categoria: 'Razas Nativas',
-        titulo: 'Palomero Toluqueño (Ancestral)',
+        titulo: 'Palomero Toluqueño (Zea mays everta)',
         icono: '🍿',
-        resumen: 'Raza milenaria de endospermo córneo cristalino capaz de reventar en flor (momochtli) al contacto con el comal.',
+        resumen: 'Raza milenaria de endospermo vítreo cristalino (20–26 hileras finas) capaz de reventar en momochtli al 14% de humedad en comal.',
         desbloqueada: false
     },
     {
-        id: 'raza_tuxpeno',
-        categoria: 'Razas Nativas',
-        titulo: 'Blanco Dentado Tuxpeño',
-        icono: '🦷',
-        resumen: 'Progenitor de gran productividad mundial; presenta una hendidura característica en la corona al secarse.',
+        id: 'eco_huitlacoche',
+        categoria: 'Ecología Milpa',
+        titulo: 'Huitlacoche (Ustilago maydis): Oro Negro',
+        icono: '🍄',
+        resumen: 'Hongo que prospera en floración con alta humedad relativa (>80%) y lluvias cálidas. En la cocina mexicana es un manjar gourmet rico en lisina y antioxidantes.',
         desbloqueada: false
     },
     // 2. Fenología
     {
         id: 'feno_emergencia',
         categoria: 'Fenología',
-        titulo: 'VE — Emergencia del Coleóptilo',
+        titulo: 'VE — Germinación y Emergencia del Coleóptilo',
         icono: '🌱',
-        resumen: 'Tras acumular ~65 GDD, el coleóptilo perfora la superficie húmeda del montículo y despliega la primera hoja.',
+        resumen: 'Tras acumular ~80 GDD con suelo húmedo y templado (>10 °C), el coleóptilo perfora la superficie del montículo y despliega las primeras hojas.',
         desbloqueada: true
     },
     {
@@ -223,6 +223,27 @@ export class CodiceMaiz {
         } catch {
             // Ignorar
         }
+    }
+
+    public exportarDesbloqueadas(): string[] {
+        return this.entradas.filter((e) => e.desbloqueada).map((e) => e.id);
+    }
+
+    public restaurarDesbloqueadas(ids?: string[] | null): void {
+        this.entradas = CATALOGO_CODICE_BASE.map((e) => ({ ...e }));
+        if (Array.isArray(ids)) {
+            for (const ent of this.entradas) {
+                if (ids.includes(ent.id)) ent.desbloqueada = true;
+            }
+        }
+        this.guardarProgreso();
+        this.actualizarModalUI();
+    }
+
+    public reiniciar(): void {
+        this.entradas = CATALOGO_CODICE_BASE.map((e) => ({ ...e }));
+        this.guardarProgreso();
+        this.actualizarModalUI();
     }
 
     public desbloquear(id: string): boolean {

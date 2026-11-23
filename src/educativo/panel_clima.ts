@@ -101,7 +101,7 @@ export class PanelClima {
     style.textContent = `
       #panel-clima-wrapper {
         position: fixed;
-        top: 56px;
+        top: 96px;
         right: 12px;
         z-index: 1800;
         font-family: var(--fuente-px);
@@ -242,7 +242,7 @@ export class PanelClima {
         color: #334155;
       }
       .slider-clima-valor {
-        color: #ca8a04;
+        color: #78350f;
         font-weight: 900;
       }
       .input-clima-slider {
@@ -402,7 +402,7 @@ export class PanelClima {
         const val = parseFloat(slider.value);
         this.clima[def.key] = val;
         const valLbl = top.querySelector(`#val_${def.key}`) as HTMLSpanElement;
-        valLbl.textContent = `${val} ${def.unidad}`;
+        valLbl.textContent = this.formatearValor(def.key, val, def.paso, def.unidad);
         this.desmarcarEscenarios();
         this.callbacks.onCambioClima(this.clima);
       });
@@ -454,14 +454,23 @@ export class PanelClima {
       : `<span>🔄</span><span>Ciclo Solar Automático: OFF</span>`;
   }
 
+  private formatearValor(key: ClimateKey, val: number, paso: number, unidad: string): string {
+    if (key === "hora") {
+      const h = Math.floor(val) % 24;
+      const m = Math.round((val - Math.floor(val)) * 60) % 60;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} h`;
+    }
+    const decimales = paso < 0.1 ? 2 : paso < 1 ? 1 : 0;
+    return `${val.toFixed(decimales)} ${unidad}`;
+  }
+
   public actualizarValoresUI(): void {
     VARIABLES.forEach((def) => {
       const item = this.sliderElements.get(def.key);
       if (item) {
         const val = this.clima[def.key];
         item.slider.value = val.toString();
-        const decimales = def.paso < 0.1 ? 2 : def.paso < 1 ? 1 : 0;
-        item.valueLabel.textContent = `${typeof val === "number" ? val.toFixed(decimales) : val} ${def.unidad}`;
+        item.valueLabel.textContent = this.formatearValor(def.key, val, def.paso, def.unidad);
       }
     });
   }

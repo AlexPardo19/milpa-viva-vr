@@ -15,6 +15,7 @@ import { CanastaRecoleccion3D } from '../vr/canasta_cosecha';
 import { AudioSintetizador } from '../audio_sintetizador';
 import { BusEventos } from './bus_eventos';
 import { clamp01 } from './util';
+import { QUELITES_MILPA } from '../nucleo';
 
 /**
  * M3: Sistema de Maleza y Quelites Comestibles (Thin Instances Zero-GC)
@@ -222,13 +223,15 @@ export class MalezaSistema {
         if (jalonSuave) {
             nodo.maleza = 0;
             this.audio.ararTierra(nodo.posicionMundo);
+            this.surco.actualizarLetrero(nodoId);
             if (eraAlta) {
                 if (this.canasta) {
                     this.canasta.depositarIngrediente('quelite');
                 }
+                const especieQ = QUELITES_MILPA[(nodoId + Math.floor(nodo.diasCultivo)) % QUELITES_MILPA.length];
                 this.bus.emitir({ t: 'deshierbe', nodo: nodoId, cantidad: 1, quelites: 1, limpio: true });
                 this.actualizarThinInstances();
-                const msg = `🌿 ¡Deshierbe de raíz en Estación #${nodoId + 1}! Recolectaste Quelites frescos para el Fogón.`;
+                const msg = `🌿 ¡Deshierbe de raíz en Estación #${nodoId + 1}! Recolectaste ${especieQ.nombre} (${especieQ.especie}) para el Fogón.`;
                 if (this.onMensajeToast) this.onMensajeToast(msg);
                 return { exito: true, mensaje: msg };
             } else {
@@ -242,6 +245,7 @@ export class MalezaSistema {
             // Jalón demasiado brusco: se troza el tallo y queda raíz viva
             nodo.maleza = Math.max(20, nodo.maleza * 0.45);
             this.audio.ararTierra(nodo.posicionMundo);
+            this.surco.actualizarLetrero(nodoId);
             this.actualizarThinInstances();
             const msg = `⚠️ Jalón muy brusco en Estación #${nodoId + 1}: se trozó el tallo y rebrotará pronto.`;
             if (this.onMensajeToast) this.onMensajeToast(msg);

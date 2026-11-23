@@ -213,6 +213,20 @@ export const ICONOS_PIXEL: Record<string, string[]> = {
     ".KttttttttK.",
     "..KTTTTTTK..",
     "...KKKKKK..."
+  ],
+  huitlacoche: [
+    "....KKKK....",
+    "..KKSSSSKK..",
+    ".KSKKGGKKSK.",
+    ".KGGSSGGGGK.",
+    ".KGGKSSKGGK.",
+    ".KSSGGGGSSK.",
+    ".KSGGGGGGSK.",
+    "..KGGGGGGK..",
+    "..KKVVVVKK..",
+    "...KVVVVK...",
+    "....KVVk....",
+    ".....KK....."
   ]
 };
 

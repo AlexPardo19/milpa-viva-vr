@@ -303,8 +303,8 @@ function ejecutarPruebas(): void {
   surco.arar(1, 1.4);
   surco.sembrar(1, "chalqueno");
   surco.sembrarAsociado(1, "frijol");
-  // Crecer hasta etapa V4+ para que el meristemo apical esté expuesto a la helada
-  surco.avanzarSimulacion(25, climaSim, calcularMetricas(climaSim));
+  // Crecer pasando germinación + etapa V4+ para que el meristemo apical esté expuesto a la helada
+  surco.avanzarSimulacion(35, climaSim, calcularMetricas(climaSim));
   triada.actualizarVisuales();
 
   // Forzar un agente de fauna activo sobre el nodo 1
@@ -364,16 +364,58 @@ function ejecutarPruebas(): void {
   const resResembrarInmediato = surco.sembrar(0, "azul");
   assert(resResembrarInmediato.exito, "Debe permitir volver a sembrar inmediatamente después de quitarPlanta");
   scene.render();
+  // Fase A activa: al sembrar recién entra en germinación subterránea (SEMILLA) con semillas visibles
   assert(
     surco.nodos[0].sembrada === true &&
+      surco.nodos[0].plantaInterna.estado === "SEMILLA" &&
+      surco.nodos[0].semillasMesh[0].isVisible === true,
+    "Al resembrar durante la animación de extracción, la nueva planta debe iniciar limpia en germinación (SEMILLA)"
+  );
+  // Al avanzar días con suelo cálido y húmedo, emerge la plántula VE y maiz.root se habilita con escala de raza Azul
+  surco.regar(0, 12);
+  surco.avanzarSimulacion(12, climaSim, calcularMetricas(climaSim, "azul"));
+  assert(
+    surco.nodos[0].plantaInterna.estado === "VIVA" &&
       surco.nodos[0].maiz.root.isEnabled() === true &&
-      Math.abs(surco.nodos[0].maiz.root.scaling.x - 0.28) < 0.001,
-    "Si se siembra durante la animación de extracción, la animación anterior debe cancelarse limpiamente sin afectar la nueva planta"
+      surco.nodos[0].maiz.root.scaling.x > 0.25,
+    "Tras acumular GDD en suelo húmedo y cálido, la semilla debe emerger (VIVA) y mostrar el brote 3D"
+  );
+
+  // 7e. Verificar asociación acumulable de Las Tres Hermanas y rechazo de duplicados
+  assert(surco.sembrarAsociado(0, "frijol").exito === true, "Debe permitir asociar Frijol Ayocote");
+  assert(surco.sembrarAsociado(0, "frijol").exito === false, "Debe rechazar duplicar Frijol en el mismo nodo");
+  assert(surco.sembrarAsociado(0, "calabaza").exito === true, "Debe permitir acumular Calabaza junto con Frijol");
+  assert(
+    surco.nodos[0].plantaInterna.tieneFrijol === true && surco.nodos[0].plantaInterna.tieneCalabaza === true,
+    "La planta interna debe conservar ambos flags tieneFrijol y tieneCalabaza simultáneamente"
+  );
+
+  // 7f. Verificar C4 + NPK + Huitlacoche en pasoDia sin NaN
+  const pHuit = crearPlanta("chalqueno", "ninguno");
+  pHuit.estado = "VIVA";
+  pHuit.gdd = 1120; // En plena ventana reproductiva VT/R1 para Chalqueño
+  const climaHuit: ClimaDia = {
+    ...climaOptimo,
+    hr: 92,
+    lluvia: 18,
+    riesgoFungico: 0.9,
+    nSuelo: 70,
+    pSuelo: 65,
+    kSuelo: 65,
+    parDiario: 1200,
+    polinizacionNivel: 0.8
+  };
+  for (let d = 0; d < 12; d++) {
+    pasoDia(pHuit, climaHuit, CFG);
+  }
+  assert(
+    !Number.isNaN(pHuit.fotosintesisUltima ?? 0) && (pHuit.huitlacoche ?? 0) >= 0.45,
+    `Bajo alta humedad/riesgo fúngico en R1 debe desarrollarse Huitlacoche (${pHuit.huitlacoche})`
   );
 
   scene.dispose();
   engine.dispose();
-  console.log("✅ [3D/Acciones/Sin Flotantes] Todas las acciones, bloqueos de conflicto, limpieza al morir y animación de Quitar Planta verificados.");
+  console.log("✅ [3D/Acciones/Sin Flotantes/Agronomía v4.1] Todas las acciones, germinación, Tres Hermanas acumulables y Huitlacoche verificados.");
 
   console.log("🎉 Todas las pruebas de Milpa Viva VR v4.0 pasaron exitosamente.");
 }

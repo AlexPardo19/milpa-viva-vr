@@ -47,11 +47,13 @@ export class InteraccionManos6DoF {
   private ultimoGolpeAzadaMs = 0;
   private ultimoAbonoMs = 0;
   private ultimaPolinizacionMs = 0;
+  private ultimoJalonMalezaMs = 0;
 
   public onMensajeToast?: (texto: string) => void;
   public onSacudidaPolen?: (nodoId: number) => void;
   public onJalonMaleza?: (nodoId: number, velocidadY: number) => void;
   public onCosecharMazorca?: (nodoId: number, variedad: any, calidad: number) => void;
+  public onEjecutarAccionUnificada?: (herramienta: HerramientaTipo, nodoId: number, potencia?: number) => void;
   public modoFPSActivo = true;
 
   constructor(
@@ -154,8 +156,12 @@ export class InteraccionManos6DoF {
     if (!mano.conectada) return;
 
     const nodoCercano = this.surco.obtenerNodoCercano(mano.pos);
-    const dist = Vector3.Distance(mano.pos, nodoCercano.posicionMundo);
-    if (dist > this.RADIO_INTERACCION_M) return;
+    // Distancia horizontal XZ para permitir interactuar tanto a ras de suelo como con la espiga alta (> 0.9 m)
+    const distXZ = Math.hypot(
+      mano.pos.x - nodoCercano.posicionMundo.x,
+      mano.pos.z - nodoCercano.posicionMundo.z
+    );
+    if (distXZ > Math.max(this.RADIO_INTERACCION_M, 0.65) || mano.pos.y > 2.6 || mano.pos.y < -0.2) return;
 
     // Seleccionar automáticamente el nodo más cercano a la mano en VR (H4)
     this.surco.nodoSeleccionadoId = nodoCercano.id;
@@ -165,19 +171,23 @@ export class InteraccionManos6DoF {
 
     // 1. Azada física por golpe descendente (v.y < -1.2 m/s)
     if (this.herramientaActiva === "azada") {
-      if (mano.vel.y < -1.2 * factorUmbral && ahora - this.ultimoGolpeAzadaMs > 550) {
+      if (mano.vel.y < -1.2 * factorUmbral && mano.pos.y < 1.15 && ahora - this.ultimoGolpeAzadaMs > 550) {
         this.ultimoGolpeAzadaMs = ahora;
         const potencia = clamp((-mano.vel.y) / 2.0, 0.5, 1.4);
-        const res = this.surco.arar(nodoCercano.id, potencia);
         mano.pulso(0.7 * clamp(potencia, 0.5, 1.0), 45);
         if (this.herramientas) this.herramientas.animarAzada();
-        if (this.onMensajeToast) this.onMensajeToast(res.mensaje);
+        if (this.onEjecutarAccionUnificada) {
+          this.onEjecutarAccionUnificada("azada", nodoCercano.id, potencia);
+        } else {
+          const res = this.surco.arar(nodoCercano.id, potencia);
+          if (this.onMensajeToast) this.onMensajeToast(res.mensaje);
+        }
       }
     }
     // 2. Regadera continua proporcional al ángulo de inclinación (35° a 110°)
     else if (this.herramientaActiva === "regadera") {
       const angulo = mano.anguloInclinacionGrados;
-      if (angulo > 35) {
+      if (angulo > 35 && mano.pos.y < 1.35) {
         const caudal = smoothstep(35, 110, angulo);
         this.surco.regarContinuo(nodoCercano.id, caudal, dt);
         mano.pulso(0.18 * caudal, 16);
@@ -187,16 +197,20 @@ export class InteraccionManos6DoF {
     else if (this.herramientaActiva === "abono") {
       if (mano.velEscalar > 0.9 * factorUmbral && mano.gatillo > 0.4 && ahora - this.ultimoAbonoMs > 800) {
         this.ultimoAbonoMs = ahora;
-        const res = this.surco.abonar(nodoCercano.id);
         mano.pulso(0.35, 30);
-        if (this.onMensajeToast) this.onMensajeToast(res.mensaje);
+        if (this.onEjecutarAccionUnificada) {
+          this.onEjecutarAccionUnificada("abono", nodoCercano.id);
+        } else {
+          const res = this.surco.abonar(nodoCercano.id);
+          if (this.onMensajeToast) this.onMensajeToast(res.mensaje);
+        }
       }
     }
 
     // 4. Polinización manual sacudiendo la espiga (> 3 Hz) cerca de la parte alta de la planta
     if (
       mano.frecuenciaSacudida > 3.0 * factorUmbral &&
-      mano.pos.y > 0.9 &&
+      mano.pos.y > 0.85 &&
       ahora - this.ultimaPolinizacionMs > 700
     ) {
       this.ultimaPolinizacionMs = ahora;
@@ -206,13 +220,15 @@ export class InteraccionManos6DoF {
       }
     }
 
-    // 5. Jalón vertical con grip para arrancar maleza/quelites a ras de suelo
+    // 5. Jalón vertical con grip para arrancar maleza/quelites a ras de suelo (con cooldown)
     if (
       mano.agarre > 0.6 &&
       mano.pos.y < 0.55 &&
       mano.vel.y > 0.35 * factorUmbral &&
-      nodoCercano.maleza > 5
+      nodoCercano.maleza > 5 &&
+      ahora - this.ultimoJalonMalezaMs > 550
     ) {
+      this.ultimoJalonMalezaMs = ahora;
       if (this.onJalonMaleza) {
         this.onJalonMaleza(nodoCercano.id, mano.vel.y);
         mano.pulso(0.4, 30);
@@ -249,8 +265,13 @@ export class InteraccionManos6DoF {
             const nodoCercano = this.surco.obtenerNodoCercano(pick.pickedMesh.getAbsolutePosition());
             this.intentarCosechaNodo(nodoCercano.id);
           }
-          // 3. Clic directo en la espiga (tassel) -> Polinización manual en Desktop (M5)
-          else if (meshName.includes("tassel")) {
+          // 3. Clic directo en la espiga (tassel/spikeCentral/branch_/anth_) -> Polinización manual en Desktop (M5)
+          else if (
+            meshName.includes("tassel") ||
+            meshName === "spikeCentral" ||
+            meshName.startsWith("branch_") ||
+            meshName.startsWith("anth_")
+          ) {
             const nodoCercano = this.surco.obtenerNodoCercano(pick.pickedMesh.getAbsolutePosition());
             if (this.onSacudidaPolen) {
               this.onSacudidaPolen(nodoCercano.id);
@@ -277,6 +298,13 @@ export class InteraccionManos6DoF {
 
     this.surco.nodoSeleccionadoId = nodoId;
     const mano = this.obtenerManoDominante();
+
+    // Si el orquestador central (main.ts) registró su tubería unificada, delegar para mantener inventario, audio y BusEventos coherentes
+    if (this.onEjecutarAccionUnificada && this.herramientaActiva !== "mano") {
+      mano.pulso(0.4, 30);
+      this.onEjecutarAccionUnificada(this.herramientaActiva, nodoId);
+      return;
+    }
 
     switch (this.herramientaActiva) {
       case "azada": {
@@ -331,12 +359,7 @@ export class InteraccionManos6DoF {
 
       case "mano": {
         const dia = nodo.diasCultivo;
-        const estaMuerta = nodo.sembrada && (nodo.plantaInterna.estado === "MUERTA" || nodo.estadoCrec.estaMuerta);
-        if (
-          nodo.sembrada &&
-          !nodo.cosechada &&
-          (dia >= 145 || (estaMuerta && nodo.plantaInterna.causaMuerte === "agotamiento"))
-        ) {
+        if (this.surco.estaListoParaCosecha(nodoId)) {
           this.intentarCosechaNodo(nodoId);
         } else if (nodo.maleza > 5) {
           if (this.onJalonMaleza) {
@@ -345,18 +368,26 @@ export class InteraccionManos6DoF {
           mano.pulso(0.4, 30);
           if (this.onMensajeToast) this.onMensajeToast(`🌿 Deshierbaste a mano en estación #${nodoId + 1}`);
         } else if (!nodo.sembrada && nodo.tierraArada < 100) {
-          const resA = this.surco.arar(nodoId, 0.5);
+          if (this.onEjecutarAccionUnificada) {
+            this.onEjecutarAccionUnificada("azada", nodoId, 0.5);
+          } else {
+            const resA = this.surco.arar(nodoId, 0.5);
+            if (this.onMensajeToast) this.onMensajeToast(resA.mensaje);
+          }
           mano.pulso(0.35, 25);
-          if (this.onMensajeToast) this.onMensajeToast(resA.mensaje);
         } else if (!nodo.sembrada && nodo.tierraArada >= 100) {
-          const resS = this.surco.sembrar(nodoId);
+          if (this.onEjecutarAccionUnificada) {
+            this.onEjecutarAccionUnificada("semilla", nodoId);
+          } else {
+            const resS = this.surco.sembrar(nodoId);
+            if (this.onMensajeToast) this.onMensajeToast(resS.mensaje);
+          }
           mano.pulso(0.3, 20);
-          if (this.onMensajeToast) this.onMensajeToast(resS.mensaje);
         } else {
           mano.pulso(0.2, 15);
           if (this.onMensajeToast) {
             this.onMensajeToast(
-              `✋ Suelo: Humedad ${Math.round(nodo.humedadVWC)}% VWC, Nutrientes ${Math.round(nodo.nutrientesNPK)}% NPK (Día ${Math.floor(dia)})`
+              `✋ Suelo: Humedad ${Math.round(nodo.humedadVWC)}% VWC, N/P/K ${Math.round(nodo.nSuelo)}/${Math.round(nodo.pSuelo)}/${Math.round(nodo.kSuelo)}% (Día ${Math.floor(dia)})`
             );
           }
         }
@@ -369,6 +400,11 @@ export class InteraccionManos6DoF {
    * Intenta cosechar la mazorca de un nodo y soltar los drops físicos 3D / depositar en canasta
    */
   public intentarCosechaNodo(nodoId: number): void {
+    if (this.onEjecutarAccionUnificada) {
+      this.obtenerManoDominante().pulso(0.65, 50);
+      this.onEjecutarAccionUnificada("cosecha", nodoId);
+      return;
+    }
     const res = this.surco.cosechar(nodoId);
     if (res.exito && res.variedad) {
       this.obtenerManoDominante().pulso(0.65, 50);
@@ -393,9 +429,12 @@ export class InteraccionManos6DoF {
    */
   public intentarCosechaManual(posMano: Vector3): void {
     const nodo = this.surco.obtenerNodoCercano(posMano);
-    const posMazorca = nodo.posicionMundo.add(new Vector3(0, 1.1, 0));
+    const earNode = nodo.maiz.getEarNode();
+    const posMazorca = earNode
+      ? earNode.getAbsolutePosition()
+      : nodo.posicionMundo.add(new Vector3(0, 1.0, 0));
     const dist = Vector3.Distance(posMano, posMazorca);
-    if (dist < 0.65) {
+    if (dist < 0.72) {
       this.intentarCosechaNodo(nodo.id);
     }
   }

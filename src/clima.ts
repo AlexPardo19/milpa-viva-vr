@@ -7,7 +7,7 @@
  *  - Métricas derivadas (GHI, PAR, lux, UV, VPD, punto de rocío, Penman-Monteith ET0, fotosíntesis C4, 6 índices de estrés).
  */
 
-import { CFG, presionSaturacion, puntoDeRocio, clamp01 } from "./nucleo";
+import { CFG, presionSaturacion, puntoDeRocio, clamp01, TipoSemilla, VARIEDADES_MAIZ } from "./nucleo";
 
 export interface ClimateState {
   temperatura: number;   // °C               (-5 a 50)
@@ -171,7 +171,8 @@ export function posicionSolar(hora: number) {
   return { dir, elevacion, azimut };
 }
 
-export function calcularMetricas(c: ClimateState): Metricas {
+export function calcularMetricas(c: ClimateState, variedad?: TipoSemilla): Metricas {
+  const varCfg = variedad ? VARIEDADES_MAIZ[variedad] : undefined;
   const sol = posicionSolar(c.hora);
   const sinE = Math.max(0, sol.dir.y);
   const esDeDia = sol.elevacion > -0.5;
@@ -219,29 +220,39 @@ export function calcularMetricas(c: ClimateState): Metricas {
       (delta + gamma * (1 + Cd * u2))
   );
 
-  // Índices de estrés
-  const estresSuelo = c.humedadSuelo < 26.0
-    ? clamp01((26.0 - c.humedadSuelo) / (26.0 - CFG.pmp))
+  // Índices de estrés (adaptados a la variedad si se indica)
+  const pmpVar = varCfg ? varCfg.pmp : CFG.pmp;
+  const vwcOptMin = varCfg ? varCfg.vwcOptimoMin : 26.0;
+  const umbralEnchVar = varCfg
+    ? Math.min(CFG.umbralEncharcamiento, varCfg.vwcOptimoMax + 6.0 + 4.0 * varCfg.resistenciaEncharcamiento)
+    : CFG.umbralEncharcamiento;
+  const tCorteVar = varCfg ? varCfg.tCorte : 28.0;
+  const tBaseVar = varCfg ? varCfg.tBase : 8.0;
+  const phMinOpt = varCfg ? varCfg.phOptimoMin : 5.8;
+  const phMaxOpt = varCfg ? varCfg.phOptimoMax : 7.5;
+
+  const estresSuelo = c.humedadSuelo < vwcOptMin
+    ? clamp01((vwcOptMin - c.humedadSuelo) / Math.max(4.0, vwcOptMin - pmpVar))
     : 0;
   const estresVPD = vpd > 1.6 ? clamp01((vpd - 1.6) / 2.4) : 0;
   const estresHidrico = clamp01(Math.max(estresSuelo, estresVPD * 0.7));
 
-  const encharcamiento = c.humedadSuelo > CFG.umbralEncharcamiento
-    ? clamp01((c.humedadSuelo - CFG.umbralEncharcamiento) / (58.0 - CFG.umbralEncharcamiento))
+  const encharcamiento = c.humedadSuelo > umbralEnchVar
+    ? clamp01((c.humedadSuelo - umbralEnchVar) / Math.max(10.0, 58.0 - umbralEnchVar))
     : 0;
 
-  const estresCalor = c.temperatura > 28.0
-    ? clamp01((c.temperatura - 28.0) / (45.0 - 28.0))
+  const estresCalor = c.temperatura > tCorteVar
+    ? clamp01((c.temperatura - tCorteVar) / Math.max(6.0, 45.0 - tCorteVar))
     : 0;
 
-  const estresFrio = c.temperatura < 8.0
-    ? clamp01((8.0 - c.temperatura) / (8.0 - (-4.0)))
+  const estresFrio = c.temperatura < tBaseVar
+    ? clamp01((tBaseVar - c.temperatura) / Math.max(4.0, tBaseVar - (-4.0)))
     : 0;
 
-  const estresNutricional = c.phSuelo < 5.8
-    ? clamp01((5.8 - c.phSuelo) / (5.8 - 3.5))
-    : c.phSuelo > 7.5
-    ? clamp01((c.phSuelo - 7.5) / (9.0 - 7.5))
+  const estresNutricional = c.phSuelo < phMinOpt
+    ? clamp01((phMinOpt - c.phSuelo) / Math.max(1.5, phMinOpt - 3.5))
+    : c.phSuelo > phMaxOpt
+    ? clamp01((c.phSuelo - phMaxOpt) / Math.max(1.2, 9.0 - phMaxOpt))
     : 0;
 
   const estresMecanico = clamp01(Math.pow(u2 / 12.0, 2.0));

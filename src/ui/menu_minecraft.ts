@@ -60,7 +60,7 @@ export class MenuPrincipalMinecraft {
     this.overlay.style.cssText = `
       position: fixed;
       inset: 0;
-      z-index: 2500;
+      z-index: 2400;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -304,14 +304,18 @@ export class MenuPrincipalMinecraft {
         display:flex; justify-content:space-between; align-items:center; gap:10px;
         background:#0f172a; border:2px solid #475569; padding:8px 10px;
       `;
-      fila.innerHTML = `
-        <div style="min-width:0;">
-          <div style="font-size:14px; font-weight:700; color:#fef08a;">🌽 ${p.nombre}</div>
-          <div style="font-size:11px; color:#94a3b8;">
-            Día máx: ${Math.floor(p.diaMaximo || 0)} · Clima: ${p.presetClima} · ${fecha}
-          </div>
-        </div>
-      `;
+
+      const info = document.createElement("div");
+      info.style.cssText = "min-width:0;";
+      const titulo = document.createElement("div");
+      titulo.style.cssText = "font-size:14px; font-weight:700; color:#fef08a;";
+      titulo.textContent = `🌽 ${p.nombre}`;
+      const sub = document.createElement("div");
+      sub.style.cssText = "font-size:11px; color:#94a3b8;";
+      sub.textContent = `Día máx: ${Math.floor(p.diaMaximo || 0)} · Clima: ${p.presetClima} · Dif: ${p.dificultad} · ${fecha}`;
+      info.append(titulo, sub);
+      fila.appendChild(info);
+
       const acciones = document.createElement("div");
       acciones.style.cssText = "display:flex; gap:6px; flex-shrink:0;";
 
@@ -329,7 +333,19 @@ export class MenuPrincipalMinecraft {
       btnBorrar.style.cssText = "background:#991b1b; color:#fff; padding:6px 9px; font-size:12px;";
       btnBorrar.textContent = "🗑️";
       btnBorrar.title = "Eliminar partida guardada";
+      let confirmando = false;
       btnBorrar.addEventListener("click", () => {
+        if (!confirmando) {
+          confirmando = true;
+          btnBorrar.textContent = "¿Borrar?";
+          btnBorrar.style.background = "#dc2626";
+          setTimeout(() => {
+            confirmando = false;
+            btnBorrar.textContent = "🗑️";
+            btnBorrar.style.background = "#991b1b";
+          }, 3000);
+          return;
+        }
         eliminarPartida(p.id);
         this.renderListaMundos();
       });

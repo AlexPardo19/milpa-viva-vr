@@ -1,9 +1,12 @@
 /**
- * Sistema de Drops Físicos y Recolección Magnética Estilo Minecraft (v4.0 — Milpa Viva VR)
+ * Sistema de Drops Físicos y Recolección Magnética Estilo Minecraft (v4.1 — Milpa Viva VR)
  *
- * Los ítems caen al cosechar con impulso parabólico, rebotan en el suelo,
- * flotan y giran sobre su eje. Cuando el jugador se acerca a menos de 2.2 metros,
- * son atraídos magnéticamente hacia su inventario con retroalimentación sonora y visual.
+ * Correcciones v4.1:
+ * - Imán apunta a la altura real del torso/pecho (jPos.y - 0.45) y mide distancia XZ horizontal.
+ * - Materiales cacheados por color (0 fugas de StandardMaterial) y tope de 48 drops activos.
+ * - Regex de clic acepta dropMesh_, dropHusk_ y dropGrain_.
+ * - Colisión básica con obstáculos sólidos y elevación del camellón del surco.
+ * - Cooldown independiente (cooldownIman) sin corromper d.edad ni snap en el aire.
  */
 
 import {
@@ -17,8 +20,8 @@ import {
   ActionManager,
   ExecuteCodeAction
 } from "@babylonjs/core";
-import { Inventario, ItemStack, DEFS } from "./inventario";
-import { VARIEDADES_MAIZ, TipoSemilla } from "../nucleo";
+import { Inventario, ItemStack } from "./inventario";
+import { resolverColisiones } from "../colisiones";
 
 export interface ItemDropFisico {
   id: number;
@@ -27,15 +30,19 @@ export interface ItemDropFisico {
   stack: ItemStack;
   velocidad: Vector3;
   enSuelo: boolean;
+  sueloY: number;
   edad: number;
+  cooldownIman: number;
   recogido: boolean;
 }
 
 export class SistemaDrops {
   private drops: ItemDropFisico[] = [];
   private contadorId = 0;
+  private readonly MAX_DROPS = 48;
   private readonly dirTmp = new Vector3();
   private readonly targetTmp = new Vector3();
+  private cacheMats = new Map<string, StandardMaterial>();
 
   constructor(
     private scene: Scene,
@@ -45,18 +52,54 @@ export class SistemaDrops {
     private alLleno: () => void
   ) {}
 
+  private obtenerMat(hex: string, emScale = 0.36): StandardMaterial {
+    const key = `${hex}_${emScale}`;
+    const cached = this.cacheMats.get(key);
+    if (cached) return cached;
+    const mat = new StandardMaterial(`matDropCache_${key}`, this.scene);
+    const col = Color3.FromHexString(hex);
+    mat.diffuseColor = col;
+    mat.emissiveColor = col.scale(emScale);
+    mat.specularColor = Color3.Black();
+    this.cacheMats.set(key, mat);
+    return mat;
+  }
+
+  private alturaSueloEn(x: number, z: number): number {
+    // Camellón elevado del surco central (W = 5.2, D = 0.95, H = 0.18 + montículos ~0.12)
+    if (Math.abs(x) <= 2.65 && Math.abs(z) <= 0.52) {
+      return 0.36;
+    }
+    return 0.2;
+  }
+
   /**
    * Genera y arroja un drop 3D físico al mundo en una posición dada.
    */
   soltar(stack: ItemStack, pos: Vector3): ItemDropFisico {
+    // Tope de seguridad de drops simultáneos (descarta el más antiguo)
+    if (this.drops.length >= this.MAX_DROPS) {
+      const viejo = this.drops.shift();
+      if (viejo) {
+        viejo.recogido = true;
+        viejo.root.dispose(false, false);
+      }
+    }
+
     const id = ++this.contadorId;
     const root = new TransformNode(`dropRoot_${id}`, this.scene);
-    root.position.copyFrom(pos).addInPlaceFromFloats(0, 0.45, 0);
+    root.position.copyFrom(pos).addInPlaceFromFloats(0, 0.55, 0);
 
     // Color según variedad o ítem
     let colorHex = "#fbbf24";
     let colorAcentoHex = "#fde68a";
-    if (stack.id === "semilla_azul" || stack.meta?.variedad?.toLowerCase().includes("azul")) {
+    if (stack.id === "huitlacoche") {
+      colorHex = "#475569";
+      colorAcentoHex = "#cbd5e1";
+    } else if (stack.id === "quelite") {
+      colorHex = "#15803d";
+      colorAcentoHex = "#86efac";
+    } else if (stack.id === "semilla_azul" || stack.meta?.variedad?.toLowerCase().includes("azul")) {
       colorHex = "#312e81";
       colorAcentoHex = "#6366f1";
     } else if (stack.id === "semilla_rojo" || stack.meta?.variedad?.toLowerCase().includes("rojo")) {
@@ -71,10 +114,6 @@ export class SistemaDrops {
     } else if (stack.id === "semilla_chalqueno" || stack.id === "semilla" || stack.id === "grano") {
       colorHex = "#eab308";
       colorAcentoHex = "#fef08a";
-    } else if (stack.meta?.variedad) {
-      const v = stack.meta.variedad.toLowerCase();
-      if (v.includes("cacahuacintle")) colorHex = "#fef08a";
-      else colorHex = "#fbbf24";
     } else if (stack.id === "frijol") {
       colorHex = "#581c87";
       colorAcentoHex = "#c084fc";
@@ -89,30 +128,19 @@ export class SistemaDrops {
       stack.id === "frijol" ||
       stack.id === "calabaza";
 
-    const mat = new StandardMaterial(`matDrop_${id}`, this.scene);
-    mat.diffuseColor = Color3.FromHexString(colorHex);
-    mat.emissiveColor = Color3.FromHexString(colorHex).scale(0.36);
-    mat.specularColor = Color3.Black(); // Look opaco estilo Minecraft
+    const mat = this.obtenerMat(colorHex, 0.36);
 
     let mesh: Mesh;
     if (esSemilla) {
-      // Bolsita voxel estilizada de semillas con cinta de color y granos asomando
       mesh = MeshBuilder.CreateBox(
         `dropMesh_${id}`,
         { width: 0.14, height: 0.15, depth: 0.09 },
         this.scene
       );
       mesh.material = mat;
-      mesh.renderOutline = true;
-      mesh.outlineWidth = 0.012;
-      mesh.outlineColor = Color3.FromHexString("#1e293b");
       mesh.parent = root;
 
-      const matBolsa = new StandardMaterial(`matDropSack_${id}`, this.scene);
-      matBolsa.diffuseColor = Color3.FromHexString("#d6b888");
-      matBolsa.emissiveColor = Color3.FromHexString("#92400e").scale(0.28);
-      matBolsa.specularColor = Color3.Black();
-
+      const matBolsa = this.obtenerMat("#d6b888", 0.28);
       const cuello = MeshBuilder.CreateBox(
         `dropHusk_${id}`,
         { width: 0.11, height: 0.035, depth: 0.075 },
@@ -120,14 +148,10 @@ export class SistemaDrops {
       );
       cuello.position.y = 0.092;
       cuello.material = matBolsa;
-      cuello.renderOutline = true;
-      cuello.outlineWidth = 0.008;
+      cuello.isPickable = false;
       cuello.parent = mesh;
 
-      const matGrano = new StandardMaterial(`matDropGrain_${id}`, this.scene);
-      matGrano.diffuseColor = Color3.FromHexString(colorAcentoHex);
-      matGrano.emissiveColor = Color3.FromHexString(colorAcentoHex).scale(0.42);
-      matGrano.specularColor = Color3.Black();
+      const matGrano = this.obtenerMat(colorAcentoHex, 0.42);
       [-0.03, 0, 0.03].forEach((gx, idx) => {
         const g = MeshBuilder.CreateBox(
           `dropGrain_${id}_${idx}`,
@@ -136,10 +160,10 @@ export class SistemaDrops {
         );
         g.position.set(gx, 0.122, idx === 1 ? 0.015 : -0.01);
         g.material = matGrano;
+        g.isPickable = false;
         g.parent = mesh;
       });
     } else {
-      // Modelo voxel/cilindro estilizado con reborde
       mesh = MeshBuilder.CreateCylinder(
         `dropMesh_${id}`,
         {
@@ -152,15 +176,9 @@ export class SistemaDrops {
       );
       mesh.rotation.z = Math.PI / 3;
       mesh.material = mat;
-      mesh.renderOutline = true;
-      mesh.outlineWidth = 0.012;
-      mesh.outlineColor = Color3.FromHexString("#1e293b");
       mesh.parent = root;
 
-      // Totomoxtle / bráctea en la base
-      const matHusk = new StandardMaterial(`matDropHusk_${id}`, this.scene);
-      matHusk.diffuseColor = Color3.FromHexString("#fde68a");
-      matHusk.specularColor = Color3.Black();
+      const matHusk = this.obtenerMat("#fde68a", 0.22);
       const husk = MeshBuilder.CreateCylinder(
         `dropHusk_${id}`,
         { height: 0.08, diameterTop: 0.08, diameterBottom: 0.04, tessellation: 6 },
@@ -168,15 +186,15 @@ export class SistemaDrops {
       );
       husk.position.y = -0.07;
       husk.material = matHusk;
+      husk.isPickable = false;
       husk.parent = mesh;
     }
 
-    // Impulso físico aleatorio estilo Minecraft
     const ang = Math.random() * Math.PI * 2;
-    const horizSpeed = 0.8 + Math.random() * 0.9;
+    const horizSpeed = 0.75 + Math.random() * 0.85;
     const velocidad = new Vector3(
       Math.cos(ang) * horizSpeed,
-      2.4 + Math.random() * 1.2,
+      2.3 + Math.random() * 1.1,
       Math.sin(ang) * horizSpeed
     );
 
@@ -187,7 +205,9 @@ export class SistemaDrops {
       stack: { ...stack, meta: stack.meta ? { ...stack.meta } : undefined },
       velocidad,
       enSuelo: false,
+      sueloY: 0.2,
       edad: 0,
+      cooldownIman: 0.45,
       recogido: false
     };
 
@@ -203,9 +223,6 @@ export class SistemaDrops {
     return drop;
   }
 
-  /**
-   * Intenta recoger directamente un drop por interacción de raycast o clic
-   */
   public recogerDirecto(drop: ItemDropFisico): boolean {
     if (drop.recogido) return false;
     const sobra = this.inv.anadir(drop.stack);
@@ -217,18 +234,19 @@ export class SistemaDrops {
 
     if (sobra === 0) {
       drop.recogido = true;
-      drop.root.dispose();
+      drop.root.dispose(false, false);
       this.drops = this.drops.filter((d) => d.id !== drop.id);
       return true;
     } else {
       drop.stack.cantidad = sobra;
+      drop.cooldownIman = 2.0;
       this.alLleno();
       return false;
     }
   }
 
   public recogerPorMeshName(meshName: string): boolean {
-    const match = meshName.match(/dropMesh_(\d+)/);
+    const match = meshName.match(/drop(?:Mesh|Husk|Grain)_(\d+)/);
     if (!match) return false;
     const id = parseInt(match[1], 10);
     const drop = this.drops.find((d) => d.id === id);
@@ -237,28 +255,31 @@ export class SistemaDrops {
   }
 
   /**
-   * Actualiza el ciclo de vida, física, flotación y atracción magnética
+   * Actualiza el ciclo de vida, física, flotación y atracción magnética hacia el pecho del jugador
    */
   actualizar(dt: number): void {
     if (this.drops.length === 0) return;
     const jPos = this.posJugador();
+    const pechoY = Math.max(0.75, jPos.y - 0.45);
 
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i];
       if (d.recogido) continue;
 
       d.edad += dt;
-      const dPos = d.root.position;
-      const dist = Vector3.Distance(dPos, jPos);
+      if (d.cooldownIman > 0) d.cooldownIman = Math.max(0, d.cooldownIman - dt);
 
-      // Imán estilo Minecraft (radio 2.2 m tras 0.45 s de vida)
-      if (d.edad > 0.45 && dist < 2.2) {
-        this.targetTmp.copyFrom(jPos).addInPlaceFromFloats(0, 0.65, 0);
+      const dPos = d.root.position;
+      const distXZ = Math.hypot(dPos.x - jPos.x, dPos.z - jPos.z);
+
+      // Imán estilo Minecraft (radio horizontal 2.2 m hacia el pecho, sin volar sobre la cabeza)
+      if (d.cooldownIman <= 0 && distXZ < 2.2) {
+        d.enSuelo = false;
+        this.targetTmp.set(jPos.x, pechoY, jPos.z);
         this.targetTmp.subtractToRef(dPos, this.dirTmp);
         const distActual = this.dirTmp.length();
 
         if (distActual < 0.48) {
-          // Llegó al jugador
           const sobra = this.inv.anadir(d.stack);
           const cantidadRecogida = d.stack.cantidad - sobra;
           if (cantidadRecogida > 0) {
@@ -267,28 +288,30 @@ export class SistemaDrops {
 
           if (sobra === 0) {
             d.recogido = true;
-            d.root.dispose();
+            d.root.dispose(false, false);
             this.drops.splice(i, 1);
             continue;
           } else {
             d.stack.cantidad = sobra;
+            d.cooldownIman = 2.0;
             this.alLleno();
-            d.edad = -1.5; // Pausa antes de reintentar atracción
           }
         } else {
           this.dirTmp.normalize();
-          const velIman = 5.5 + (2.2 - dist) * 4.0;
+          const velIman = 5.5 + (2.2 - distXZ) * 4.0;
           dPos.addInPlace(this.dirTmp.scale(dt * velIman));
         }
       } else {
-        // Balística y gravedad
+        // Balística y gravedad con altura real del suelo/camellón y rebote en obstáculos
         if (!d.enSuelo) {
           d.velocidad.y -= 9.8 * dt;
           dPos.addInPlace(d.velocidad.scale(dt));
+          resolverColisiones(dPos, 0.12);
 
-          // Contacto con el suelo
-          if (dPos.y <= 0.2) {
-            dPos.y = 0.2;
+          const pisoY = this.alturaSueloEn(dPos.x, dPos.z);
+          if (dPos.y <= pisoY) {
+            dPos.y = pisoY;
+            d.sueloY = pisoY;
             if (Math.abs(d.velocidad.y) > 0.8) {
               d.velocidad.y = -d.velocidad.y * 0.35;
               d.velocidad.x *= 0.5;
@@ -299,16 +322,15 @@ export class SistemaDrops {
             }
           }
         } else {
-          // Rotación y flotación suave estilo Minecraft
           d.root.rotation.y += dt * 1.8;
-          dPos.y = 0.2 + Math.sin(d.edad * 3.2 + d.id) * 0.04;
+          dPos.y = d.sueloY + Math.sin(d.edad * 3.2 + d.id) * 0.04;
         }
       }
 
       // Desaparición tras 300 segundos (5 minutos)
       if (d.edad > 300) {
         d.recogido = true;
-        d.root.dispose();
+        d.root.dispose(false, false);
         this.drops.splice(i, 1);
       }
     }
@@ -316,7 +338,7 @@ export class SistemaDrops {
 
   limpiar(): void {
     for (const d of this.drops) {
-      d.root.dispose();
+      d.root.dispose(false, false);
     }
     this.drops = [];
   }

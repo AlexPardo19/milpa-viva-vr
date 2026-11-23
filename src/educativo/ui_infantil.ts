@@ -19,6 +19,7 @@ export interface UIEducativaCallbacks {
   onToggleTimeLapse: () => void;
   onAvanzarSemana: () => void;
   onReiniciar: () => void;
+  onContinuarTrasLogro?: () => void;
   onToggleModoCientifico: () => boolean;
   // Callbacks v4.0 Milpa Viva y Menús
   onQuitarPlanta?: () => void;
@@ -37,6 +38,7 @@ export interface UIEducativaCallbacks {
   onAbrirControles?: () => void;
   onAbrirDispensador?: () => void;
   onAbrirPausa?: () => void;
+  onAbrirFichaCultivo?: () => void;
 }
 
 export class UIEducativa {
@@ -76,6 +78,9 @@ export class UIEducativa {
   private laboresDrawer!: HTMLDivElement;
   private laboresAbierto = false;
   private hudCompactoOculto = false;
+  private etapaTextoOverride: string | null = null;
+  private vwcOptimoMin = 24;
+  private vwcOptimoMax = 45;
 
   constructor(estado: EstadoEducativo, callbacks: UIEducativaCallbacks) {
     this.estado = estado;
@@ -291,24 +296,26 @@ export class UIEducativa {
         font-family: inherit;
       }
 
-      /* Banner Meteorológico Compacto */
+      /* Banner Meteorológico Compacto (debajo de la píldora de misión, sin solapamiento) */
       .banner-clima-alerta {
         position: fixed;
-        top: 72px;
+        top: 108px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(127, 29, 29, 0.65);
+        background: rgba(127, 29, 29, 0.78);
         color: #fef2f2;
-        border: 2px solid rgba(252, 165, 165, 0.72);
+        border: 2px solid rgba(252, 165, 165, 0.85);
         border-radius: 0;
-        padding: 4px 12px;
+        padding: 5px 14px;
         font-size: 12px;
         font-weight: 800;
         text-shadow: 1px 1px 0 #000;
-        box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+        box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.55);
         display: none;
         pointer-events: none;
-        z-index: 140;
+        z-index: 1550;
+        max-width: min(560px, 90vw);
+        text-align: center;
       }
 
       /* Zona Inferior: Cajón de Labores + Hotbar */
@@ -577,6 +584,7 @@ export class UIEducativa {
     menusBar.className = "menus-top-bar";
 
     const botonesMenus: { icon: string; label: string; key: string; fn: () => void }[] = [
+      { icon: "🔍", label: "Ficha", key: "L", fn: () => this.callbacks.onAbrirFichaCultivo?.() },
       { icon: "🌰", label: "Dispensador", key: "U", fn: () => this.callbacks.onAbrirDispensador?.() },
       { icon: "🧬", label: "Semillas", key: "M", fn: () => this.callbacks.onAbrirBancoSemillas?.() },
       { icon: "🏛️", label: "Troje", key: "I", fn: () => this.callbacks.onAbrirAlmacen?.() },
@@ -611,14 +619,15 @@ export class UIEducativa {
     this.topRow.appendChild(menusBar);
     this.container.appendChild(this.topRow);
 
-    // Banner de Alerta Meteorológica (M6)
+    // Banner de Alerta Meteorológica (M6) — anexado al body para evitar quedar atrapado en z-index: 100
     this.bannerEventoClimatico = document.createElement("div");
     this.bannerEventoClimatico.className = "banner-clima-alerta";
-    this.container.appendChild(this.bannerEventoClimatico);
+    document.body.appendChild(this.bannerEventoClimatico);
 
-    // Modal de Celebración de Trofeo
+    // Modal de Celebración de Trofeo — anexado directo a document.body (z-index: 2900, fuera del stacking context z:100)
     this.modalTrofeo = document.createElement("div");
     this.modalTrofeo.className = "modal-celebracion";
+    this.modalTrofeo.style.zIndex = "2900";
     this.modalTrofeo.innerHTML = `
       <div class="trofeo-card">
         <div class="trofeo-icono">🏆</div>
@@ -639,10 +648,35 @@ export class UIEducativa {
     `;
     const btnRestart = this.modalTrofeo.querySelector("#btnSembrarDeNuevo")!;
     btnRestart.addEventListener("click", () => {
-      this.modalTrofeo.classList.remove("visible");
-      this.callbacks.onReiniciar();
+      this.cerrarTrofeo();
     });
-    this.container.appendChild(this.modalTrofeo);
+    document.body.appendChild(this.modalTrofeo);
+  }
+
+  public cerrarTrofeo(): void {
+    this.modalTrofeo.classList.remove("visible");
+    if (this.estado.fase === "celebrar") {
+      this.estado.fase = "arar";
+    }
+    if (this.callbacks.onContinuarTrasLogro) {
+      this.callbacks.onContinuarTrasLogro();
+    } else {
+      this.actualizarUI();
+    }
+  }
+
+  public estaTrofeoAbierto(): boolean {
+    return this.modalTrofeo.classList.contains("visible");
+  }
+
+  public actualizarTelemetriaParcela(
+    etapaTexto: string | null,
+    vwcOptMin = 24,
+    vwcOptMax = 45
+  ): void {
+    this.etapaTextoOverride = etapaTexto;
+    this.vwcOptimoMin = vwcOptMin;
+    this.vwcOptimoMax = vwcOptMax;
   }
 
   /**
@@ -662,19 +696,20 @@ export class UIEducativa {
     this.barTierra.style.width = `${this.estado.tierraArada}%`;
     this.txtTierra.textContent = `${this.estado.tierraArada}%`;
 
-    this.barAgua.style.width = `${this.estado.humedadSuelo}%`;
+    const aguaPct = Math.max(0, Math.min(100, (this.estado.humedadSuelo / 60) * 100));
+    this.barAgua.style.width = `${aguaPct}%`;
     let aguaEstado = `${Math.round(this.estado.humedadSuelo)}%`;
-    if (this.estado.humedadSuelo < 28) aguaEstado += " (Seco)";
-    else if (this.estado.humedadSuelo > 78) aguaEstado += " (Exceso)";
+    if (this.estado.humedadSuelo < this.vwcOptimoMin) aguaEstado += " (Seco)";
+    else if (this.estado.humedadSuelo > this.vwcOptimoMax) aguaEstado += " (Exceso)";
     else aguaEstado += " (Óptimo)";
     this.txtAgua.textContent = aguaEstado;
 
     this.barNutrientes.style.width = `${this.estado.nutrientesSuelo}%`;
     this.txtNutrientes.textContent = `${Math.round(this.estado.nutrientesSuelo)}%`;
 
-    // Actualizar Día y Etapa
+    // Actualizar Día y Etapa real (siempre refleja muerte/emergencia/madurez real del nodo)
     this.txtDia.textContent = `Día ${Math.floor(this.estado.diaActual)}`;
-    this.txtEtapa.textContent = this.estado.obtenerNombreEtapa();
+    this.txtEtapa.textContent = this.etapaTextoOverride ?? this.estado.obtenerNombreEtapa();
 
     // Actualizar Botón de Herramienta Activa
     if (this.botonesHerramientas.size > 0) {

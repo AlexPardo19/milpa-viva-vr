@@ -134,6 +134,23 @@ export interface VariedadMaizConfig {
   resistenciaViento: number; // 0..1
   resistenciaEncharcamiento: number; // 0..1
   mazorcasTipicas: number; // 1 a 3
+  // Perfil agronómico, morfológico y culinario detallado (v4.1)
+  tipoEndospermo: string;
+  hilerasMazorca: string;
+  pesoMilGranosG: number;
+  rendimientoPotencialTonHa: string;
+  densidadSiembraPlHa: string;
+  profundidadSiembraCm: string;
+  diasFloracionEst: string;
+  diasEloteR3Est: string;
+  diasMadurezR6Est: string;
+  humedadCosechaElotePct: number;
+  humedadCosechaGranoPct: number;
+  demandaN: 'Baja' | 'Media' | 'Alta';
+  demandaP: 'Baja' | 'Media' | 'Alta';
+  demandaK: 'Baja' | 'Media' | 'Alta';
+  perfilNutricional: string;
+  usosCulinarios: string;
   condicionesFavorables: string;
   queLePerjudica: string;
   descripcionPedagogica: string;
@@ -166,8 +183,24 @@ export const VARIEDADES_MAIZ: Record<TipoSemilla, VariedadMaizConfig> = {
     resistenciaViento: 0.40, // Gran porte (3.50 m) -> susceptible a acame con viento fuerte
     resistenciaEncharcamiento: 0.50,
     mazorcasTipicas: 1,
-    condicionesFavorables: 'Clima templado subhúmedo (18–26 °C), buena humedad constante (24–34% VWC) y suelos profundos ricos en Nitrógeno (NPK ≥ 55%, asociación con Frijol).',
-    queLePerjudica: 'Vientos fuertes (> 11 m/s provocan acame severo por su altura de 3.5 m si no tiene Tutor [T]), sequía (< 15% VWC) y suelos pobres en nutrientes (NPK < 35%).',
+    tipoEndospermo: 'Dentado suave (almidón harinoso en corona y vítreo lateral)',
+    hilerasMazorca: '16–20 hileras (mazorca cónica-cilíndrica de 18–24 cm)',
+    pesoMilGranosG: 390,
+    rendimientoPotencialTonHa: '5.5–8.5 t/ha en temporal bueno',
+    densidadSiembraPlHa: '50,000–62,000 plantas/ha',
+    profundidadSiembraCm: '5–7 cm (suelo franco profundo)',
+    diasFloracionEst: '95–110 días',
+    diasEloteR3Est: '125–145 días (elote dulce tierno)',
+    diasMadurezR6Est: '165–185 días (grano seco / dobla)',
+    humedadCosechaElotePct: 73,
+    humedadCosechaGranoPct: 14,
+    demandaN: 'Alta',
+    demandaP: 'Alta',
+    demandaK: 'Alta',
+    perfilNutricional: 'Alto en carbohidratos complejos, fibra soluble y carotenoides (luteína y zeaxantina).',
+    usosCulinarios: 'Elote hervido y asado, esquites, tamales de masa esponjosa, pozole y tortillas suaves.',
+    condicionesFavorables: 'Clima templado subhúmedo (18–26 °C), buena humedad constante (24–34% VWC) y suelos profundos ricos en Nitrógeno (N ≥ 55%, asociación con Frijol).',
+    queLePerjudica: 'Vientos fuertes (> 11 m/s provocan acame severo por su altura de 3.5 m si no tiene Tutor [T]), sequía (< 15% VWC) y suelos pobres en Nitrógeno y Potasio.',
     descripcionPedagogica: 'Zea mays subsp. mays raza Chalqueño: caña monumental de hasta 3.5 m y mazorca cónica-cilíndrica de alto rendimiento. Exige suelo fértil y aporque/tutor contra el viento.'
   },
   azul: {
@@ -196,6 +229,22 @@ export const VARIEDADES_MAIZ: Record<TipoSemilla, VariedadMaizConfig> = {
     resistenciaViento: 0.70,
     resistenciaEncharcamiento: 0.60,
     mazorcasTipicas: 1,
+    tipoEndospermo: 'Harinoso suave (ideal para masa fina y nixtamalización rápida)',
+    hilerasMazorca: '14–16 hileras (mazorca cónica corta de 13–17 cm)',
+    pesoMilGranosG: 310,
+    rendimientoPotencialTonHa: '3.2–5.0 t/ha en laderas de altura',
+    densidadSiembraPlHa: '55,000–65,000 plantas/ha',
+    profundidadSiembraCm: '4–6 cm (suelos volcánicos andosoles)',
+    diasFloracionEst: '75–90 días',
+    diasEloteR3Est: '105–120 días',
+    diasMadurezR6Est: '140–160 días',
+    humedadCosechaElotePct: 72,
+    humedadCosechaGranoPct: 14,
+    demandaN: 'Media',
+    demandaP: 'Alta',
+    demandaK: 'Media',
+    perfilNutricional: 'Rico en antocianinas (cianidina-3-glucósido), menor índice glucémico y ~20% más proteína que híbridos blancos.',
+    usosCulinarios: 'Tortillas azules nixtamalizadas, tlacoyos, quesadillas, atole de pinole y totopos artesanales.',
     condicionesFavorables: 'Clima frío a fresco de montaña (12–22 °C), humedad moderada (20–32% VWC) y suelos volcánicos ligeramente ácidos (pH 5.5–6.8). Resiste heladas hasta -5 °C.',
     queLePerjudica: 'Calor excesivo (> 28 °C deshidrata la planta y esteriliza su polen en floración), sequía atmosférica (HR < 35%) y suelos alcalinos (pH > 7.5).',
     descripcionPedagogica: 'Zea mays subsp. mays raza Cónico Azul: rico en antocianinas que protegen sus tejidos del frío de alta montaña y radiación UV, pero sufre con el calor intenso.'
@@ -203,8 +252,8 @@ export const VARIEDADES_MAIZ: Record<TipoSemilla, VariedadMaizConfig> = {
   rojo: {
     tipo: 'rojo',
     nombre: 'Maíz Rojo (Sangre de Cristo)',
-    especieBotanica: 'Zea mays L. subsp. mays (Raza Cónico Norteño / Celaya)',
-    origenBiogeografico: 'Semidesierto y Bajío Seco Mexicano (1,200–2,100 m s.n.m.)',
+    especieBotanica: 'Zea mays L. subsp. mays (Raza Cónico Norteño)',
+    origenBiogeografico: 'Altiplano Semiárido y Bajío Seco Mexicano (1,400–2,200 m s.n.m.)',
     subtitulo: 'Raza de secano profundo con raíces adaptadas a la aridez',
     colorHex: '#991b1b',
     colorBracteasHex: '#4d7c0f',
@@ -226,6 +275,22 @@ export const VARIEDADES_MAIZ: Record<TipoSemilla, VariedadMaizConfig> = {
     resistenciaViento: 0.65,
     resistenciaEncharcamiento: 0.25, // Se pudre rápido si se inunda
     mazorcasTipicas: 1,
+    tipoEndospermo: 'Semidentado a semicristalino (pericarpio rojo rico en flavonoides)',
+    hilerasMazorca: '12–16 hileras (mazorca cilíndrica firme de 15–20 cm)',
+    pesoMilGranosG: 340,
+    rendimientoPotencialTonHa: '3.5–5.5 t/ha en temporal seco',
+    densidadSiembraPlHa: '42,000–52,000 plantas/ha (espaciado amplio de secano)',
+    profundidadSiembraCm: '6–8 cm (busca humedad profunda)',
+    diasFloracionEst: '85–95 días',
+    diasEloteR3Est: '115–130 días',
+    diasMadurezR6Est: '150–170 días',
+    humedadCosechaElotePct: 70,
+    humedadCosechaGranoPct: 13.5,
+    demandaN: 'Media',
+    demandaP: 'Media',
+    demandaK: 'Alta',
+    perfilNutricional: 'Alto en flavonoides (pelargonidina y ácido ferúlico), fibra dietética y antioxidantes resistentes al calor.',
+    usosCulinarios: 'Tamales en totomoxtle, pinole tostado, atoles ceremoniales, gorditas y tortillas de aroma intenso.',
     condicionesFavorables: 'Clima cálido y soleado (22–34 °C), suelos bien drenados con humedad baja a moderada (12–26% VWC, PMP de solo 8.5%). Tolera canículas y sequías.',
     queLePerjudica: 'Exceso de riego y encharcamiento (> 34% VWC provoca asfixia y pudrición radicular rápida) y frío o heladas (< 8 °C detiene su crecimiento; muere a -1.5 °C).',
     descripcionPedagogica: 'Zea mays subsp. mays raza Cónico Norteño «Sangre de Cristo»: campeona en tierras áridas y cálidas, pero muy vulnerable al exceso de agua y a las heladas.'
@@ -256,6 +321,22 @@ export const VARIEDADES_MAIZ: Record<TipoSemilla, VariedadMaizConfig> = {
     resistenciaViento: 0.96, // Porte bajo y anclaje doble -> casi inmune al acame
     resistenciaEncharcamiento: 0.65,
     mazorcasTipicas: 2,
+    tipoEndospermo: 'Vítreo cristalino ultraduro (reventador: expande al 13.5–14.5% de humedad)',
+    hilerasMazorca: '20–26 hileras finas (2–3 mazorcas cortas puntiagudas de 9–13 cm)',
+    pesoMilGranosG: 165,
+    rendimientoPotencialTonHa: '2.0–3.4 t/ha (alta prolificidad en mazorcas)',
+    densidadSiembraPlHa: '60,000–72,000 plantas/ha',
+    profundidadSiembraCm: '3–5 cm (semilla pequeña)',
+    diasFloracionEst: '68–82 días',
+    diasEloteR3Est: '95–112 días',
+    diasMadurezR6Est: '130–148 días (requiere secado en campo hasta ~14% humedad)',
+    humedadCosechaElotePct: 68,
+    humedadCosechaGranoPct: 14,
+    demandaN: 'Baja',
+    demandaP: 'Media',
+    demandaK: 'Media',
+    perfilNutricional: 'Grano integral denso en zeína, polifenoles del pericarpio y fibra; revienta sin aceite en comal.',
+    usosCulinarios: 'Momochtli (palomitas prehispánicas en comal), esquites tostados, alegría ceremonial y pinole dulce.',
     condicionesFavorables: 'Clima templado-frío y ventoso de altiplano (14–24 °C), humedad constante en emergencia (22–34% VWC) y parcela limpia de maleza. Ciclo rápido y resistente a vendavales.',
     queLePerjudica: 'Competencia por maleza (> 25% de maleza lo ahoga por su porte bajo de 2.1 m), olas de calor (> 30 °C) y sobremaduración en campo post-R6.',
     descripcionPedagogica: 'Zea mays subsp. everta raza Palomero Toluqueño: grano cristalino reventador, porte bajo (2.1 m) con raíces zanco dobles contra el viento. Requiere deshierbe oportuno.'
@@ -265,9 +346,22 @@ export const VARIEDADES_MAIZ: Record<TipoSemilla, VariedadMaizConfig> = {
 export interface CultivoAsociadoEfecto {
   tipo: CultivoAsociado;
   nombre: string;
+  especieBotanica: string;
   icono: string;
   beneficioNitrogenoDia: number; // e.g. +1.5% N por día (Frijol)
   factorEvaporacionSuelo: number; // e.g. 0.65 (Calabaza - mulch vivo)
+  tempOptimaMin: number;
+  tempOptimaMax: number;
+  tempHeladaLetal: number;
+  vwcOptimoMin: number;
+  vwcOptimoMax: number;
+  phOptimoMin: number;
+  phOptimoMax: number;
+  diasFloracion: string;
+  diasCosecha: string;
+  momentoSiembra: string;
+  simbiosisInfo: string;
+  usosCulinarios: string;
   descripcion: string;
 }
 
@@ -275,28 +369,157 @@ export const CULTIVOS_ASOCIADOS: Record<CultivoAsociado, CultivoAsociadoEfecto> 
   ninguno: {
     tipo: 'ninguno',
     nombre: 'Solo Maíz',
+    especieBotanica: 'Monocultivo de Zea mays L.',
     icono: '🌽',
     beneficioNitrogenoDia: 0,
     factorEvaporacionSuelo: 1.0,
+    tempOptimaMin: 16,
+    tempOptimaMax: 28,
+    tempHeladaLetal: -2.5,
+    vwcOptimoMin: 20,
+    vwcOptimoMax: 34,
+    phOptimoMin: 5.8,
+    phOptimoMax: 7.4,
+    diasFloracion: '—',
+    diasCosecha: '—',
+    momentoSiembra: '—',
+    simbiosisInfo: 'Sin simbiosis de leguminosas ni cobertura viva; requiere mayor aporte externo de abono y deshierbe.',
+    usosCulinarios: 'Solo grano de maíz.',
     descripcion: 'Monocultivo tradicional sin plantas acompañantes.'
   },
   frijol: {
     tipo: 'frijol',
-    nombre: 'Frijol Enredador',
+    nombre: 'Frijol Ayocote Enredador',
+    especieBotanica: 'Phaseolus coccineus L. (Leguminosa de Valles Altos)',
     icono: '🫘',
     beneficioNitrogenoDia: 1.5,
     factorEvaporacionSuelo: 0.95,
-    descripcion: 'Trepa por la caña y fija nitrógeno natural (+1.5% N/día) para enriquecer el suelo.'
+    tempOptimaMin: 14,
+    tempOptimaMax: 24,
+    tempHeladaLetal: -0.5,
+    vwcOptimoMin: 22,
+    vwcOptimoMax: 34,
+    phOptimoMin: 5.8,
+    phOptimoMax: 7.2,
+    diasFloracion: '50–65 días (racimos florales que atraen abejas y colibríes)',
+    diasCosecha: '75–90 días (ejote tierno) · 120–145 días (grano seco)',
+    momentoSiembra: 'Junto al maíz o 10–15 días tras emergencia (V2) para no sofocar la plántula.',
+    simbiosisInfo: 'Sus nódulos radiculares con bacterias Rhizobium fijan nitrógeno atmosférico (N₂ → NH₄⁺), solo si el suelo está aireado (no encharcado) y en pH 5.8–7.2. También refuerza la caña contra el viento.',
+    usosCulinarios: 'Ejotes tiernos, ayocotes en caldo con epazote, tlacoyos y complemento proteico (lisina + triptófano) con el maíz.',
+    descripcion: 'Trepa por la caña del maíz y fija nitrógeno natural (+N/día) mediante simbiosis con Rhizobium.'
   },
   calabaza: {
     tipo: 'calabaza',
-    nombre: 'Calabaza Rastrera',
+    nombre: 'Calabaza Criolla Rastrera',
+    especieBotanica: 'Cucurbita pepo L. (Cucurbitácea mesoamericana)',
     icono: '🎃',
     beneficioNitrogenoDia: 0,
     factorEvaporacionSuelo: 0.65, // Reduce evaporación 35%
-    descripcion: 'Hojas anchas que cubren el suelo como mulch vivo, conservando 35% más de humedad.'
+    tempOptimaMin: 18,
+    tempOptimaMax: 30,
+    tempHeladaLetal: 0.0,
+    vwcOptimoMin: 20,
+    vwcOptimoMax: 35,
+    phOptimoMin: 6.0,
+    phOptimoMax: 7.5,
+    diasFloracion: '45–55 días (flores masculinas y femeninas polinizadas por abejas)',
+    diasCosecha: '55–70 días (flor y calabacita tierna) · 110–130 días (calabaza madura)',
+    momentoSiembra: 'Simultánea al maíz en los bordes del surco para extender sus guías por el suelo.',
+    simbiosisInfo: 'Sus hojas anchas actúan como acolchado vivo (mulch): reducen 35% la evaporación del suelo, bloquean luz a la maleza (-65%) y sus flores amarillas atraen abejas nativas.',
+    usosCulinarios: 'Quesadillas de flor de calabaza, calabaza en tacha, pepitas tostadas ricas en zinc y grasas saludables.',
+    descripcion: 'Hojas anchas que cubren el suelo como mulch vivo, conservando 35% más humedad y suprimiendo maleza.'
   }
 };
+
+export interface QueliteInfo {
+  id: string;
+  nombre: string;
+  especie: string;
+  reconocimiento: string;
+  nutricion: string;
+  usoCulinario: string;
+}
+
+export const QUELITES_MILPA: QueliteInfo[] = [
+  {
+    id: 'quintonil',
+    nombre: 'Quintonil',
+    especie: 'Amaranthus hybridus L.',
+    reconocimiento: 'Hojas romboidales verde oscuro en tallo erguido rojizo; crece espontáneamente en surcos fértiles.',
+    nutricion: 'Rico en hierro, calcio, vitamina A, vitamina C y proteína vegetal (lisina).',
+    usoCulinario: 'Salteado con ajo y chile en quesadillas, tacos y caldos de milpa.'
+  },
+  {
+    id: 'verdolaga',
+    nombre: 'Verdolaga',
+    especie: 'Portulaca oleracea L.',
+    reconocimiento: 'Tallos rastreros rojizos y hojas carnosas en forma de cucharita; tolera calor y sequía.',
+    nutricion: 'Una de las fuentes vegetales más ricas en ácidos grasos omega-3, magnesio y potasio.',
+    usoCulinario: 'Guisada en salsa verde, ensaladas frescas o con frijoles de la olla.'
+  },
+  {
+    id: 'quelite_cenizo',
+    nombre: 'Quelite Cenizo',
+    especie: 'Chenopodium berlandieri Moq.',
+    reconocimiento: 'Hojas dentadas con polvillo harinoso blanquecino en el envés; pariente del huauzontle.',
+    nutricion: 'Alto contenido de fibra, folatos, calcio y antioxidantes fenólicos.',
+    usoCulinario: 'Hervido con epazote, tortitas capeadas o en esquites tradicionales.'
+  },
+  {
+    id: 'epazote',
+    nombre: 'Epazote de Milpa',
+    especie: 'Dysphania ambrosioides (L.)',
+    reconocimiento: 'Hojas lanceoladas dentadas de aroma cítrico-resinoso muy característico al frotarlas.',
+    nutricion: 'Aceites esenciales digestivos (ascaridol en bajas dosis), minerales y efecto carminativo.',
+    usoCulinario: 'Indispensable en esquites, frijoles ayocote, quesadillas de flor de calabaza y huitlacoche.'
+  }
+];
+
+export interface EnfermedadMaizInfo {
+  id: 'huitlacoche' | 'roya' | 'tizon' | 'pudricion_mazorca';
+  nombre: string;
+  patogeno: string;
+  condiciones: string;
+  sintomas: string;
+  manejo: string;
+  esComestible?: boolean;
+}
+
+export const ENFERMEDADES_MAIZ: EnfermedadMaizInfo[] = [
+  {
+    id: 'huitlacoche',
+    nombre: 'Huitlacoche (Carbón Común)',
+    patogeno: 'Ustilago maydis (hongo basidiomiceto)',
+    condiciones: 'Humedad relativa ≥ 80%, lluvias intermitentes y 20–28 °C durante floración (VT–R2).',
+    sintomas: 'Agallas globosas gris-plateadas en los granos de la mazorca; en México es un manjar culinario de alto valor.',
+    manejo: 'Cosechar tierno (antes de que las agallas se tornen polvo negro) para preparar quesadillas de huitlacoche en el Fogón.',
+    esComestible: true
+  },
+  {
+    id: 'roya',
+    nombre: 'Roya Común del Maíz',
+    patogeno: 'Puccinia sorghi',
+    condiciones: 'HR > 85%, rocío persistente y temperaturas frescas-templadas (16–24 °C).',
+    sintomas: 'Pústulas pequeñas de color óxido-canela en ambas caras de las hojas que reducen la fotosíntesis.',
+    manejo: 'Evitar exceso de riego foliar/encharcamiento, mantener buena ventilación y deshierbe oportuno.'
+  },
+  {
+    id: 'tizon',
+    nombre: 'Tizón Foliar del Norte',
+    patogeno: 'Exserohilum turcicum',
+    condiciones: 'Lluvias prolongadas, rocío nocturno (> 6 h) y 18–27 °C en etapas V8–R3.',
+    sintomas: 'Lesiones alargadas gris-verdosas en forma de cigarro en las hojas inferiores que avanzan hacia arriba.',
+    manejo: 'Rotar cultivos, retirar rastrojo enfermo con [Q] y evitar humedad estancada en el surco.'
+  },
+  {
+    id: 'pudricion_mazorca',
+    nombre: 'Pudrición de Mazorca y Gorgojo en Troje',
+    patogeno: 'Fusarium verticillioides / Sitophilus zeamais',
+    condiciones: 'Almacenar mazorcas con humedad de grano > 15% o daño previo por gusano elotero.',
+    sintomas: 'Micelio blanquecino-rosado en la punta de la mazorca y granos perforados en almacén.',
+    manejo: 'Dejar secar la mazorca en campo («dobla» hasta R6 ≤ 14% humedad) antes de guardar grano para semilla.'
+  }
+];
 
 export type Causa =
   | 'helada'
@@ -324,6 +547,14 @@ export interface ClimaDia {
   pm25?: number;                 // µg/m³
   hora?: number;                 // h solar (0 a 24)
   estresBiotico?: number;        // 0..1 daño por plagas (cogollero / aves, M4)
+  // Campos agronómicos v4.1 (PAR/CO2/Petate, NPK desglosado, hongos y polinización)
+  parDiario?: number;            // µmol fotones / m² / s promedio diurno
+  factorLuz?: number;            // 0..1 (ej. 0.55 si el petate bloquea sol)
+  nSuelo?: number;               // 0..100 % Nitrógeno disponible
+  pSuelo?: number;               // 0..100 % Fósforo disponible
+  kSuelo?: number;               // 0..100 % Potasio disponible
+  riesgoFungico?: number;        // 0..1 índice de riesgo fúngico
+  polinizacionNivel?: number;    // 0..1 nivel real de polinización (viento + abejas + manual)
 }
 
 export interface Estreses {
@@ -351,6 +582,8 @@ export interface RasgosHeredables {
 export interface Planta {
   variedad: TipoSemilla;
   cultivoAsociado: CultivoAsociado;
+  tieneFrijol?: boolean;         // Asociación independiente de Frijol (Tríada apilable)
+  tieneCalabaza?: boolean;       // Asociación independiente de Calabaza (Tríada apilable)
   rasgosHeredados?: RasgosHeredables;
   estado: EstadoPlanta;
   gddSiembra: number;            // acumulado antes de emerger
@@ -379,7 +612,7 @@ export interface Planta {
   frio: number;                  // 0..1 (flaccidez y contracción por helada)
   acameGrados: number;           // rotación basal de la caña (0° a 55°)
   amarillamiento: number;        // 0..1 clorosis y senescencia
-  antocianina: number;           // 0..1 enrojecimiento por pH ácido / frío
+  antocianina: number;           // 0..1 enrojecimiento por pH ácido / frío / déficit P
 
   // Mazorca / Elote (Zea mays L.)
   eloteVis: number;              // 0 (sin elote) o 1 (elote visible)
@@ -391,6 +624,12 @@ export interface Planta {
   bracteasSeco: number;          // 0 (hojas de mazorca verdes) -> 1 (pajizo seco)
   asiDias: number;               // Intervalo antesis-estigmas (ASI)
   cuajado: number;               // Fracción de fecundación de granos (0..1)
+
+  // Fitopatología, humedad de grano y fotosíntesis (v4.1)
+  humedadGranoPct?: number;      // 85% (R2) -> ~72% (R3 elote) -> ~30% (R6) -> ~14% (dobla seco)
+  huitlacoche?: number;          // 0..1 desarrollo de Ustilago maydis (cosechable >= 0.45)
+  danoFungico?: number;          // 0..1 daño foliar por Roya / Tizón
+  fotosintesisUltima?: number;   // µmol CO2 / m² / s calculada en el último paso
 }
 
 // ---------------------------------------------------------------------------
@@ -626,6 +865,8 @@ export function crearPlanta(variedad: TipoSemilla = 'chalqueno', cultivoAsociado
   return {
     variedad,
     cultivoAsociado,
+    tieneFrijol: cultivoAsociado === 'frijol',
+    tieneCalabaza: cultivoAsociado === 'calabaza',
     estado: 'SEMILLA',
     gddSiembra: 0.0,
     gdd: 0.0,
@@ -662,7 +903,12 @@ export function crearPlanta(variedad: TipoSemilla = 'chalqueno', cultivoAsociado
     estigmaSeco: 0.0,
     bracteasSeco: 0.0,
     asiDias: CFG.asiBaseDias,
-    cuajado: 1.0
+    cuajado: 1.0,
+
+    humedadGranoPct: 85,
+    huitlacoche: 0,
+    danoFungico: 0,
+    fotosintesisUltima: 0
   };
 }
 
@@ -857,9 +1103,11 @@ export function pasoDia(p: Planta, d: ClimaDia, cfg = CFG): Planta {
     p.diasEncharcado = Math.max(0.0, p.diasEncharcado - 0.5);
   }
 
-  // 4. Mecánica de Acame por Viento y Suelo Saturado (modulado por porte y raíces de la variedad)
+  // 4. Mecánica de Acame por Viento y Suelo Saturado (modulado por porte, raíces y Potasio K)
+  const kSuelo = d.kSuelo ?? 60;
+  const factorRigidezK = 0.86 + 0.18 * clamp01(kSuelo / 70);
   const umbralBase = d.vwc > cfg.umbralEncharcamiento ? 14.0 : 18.0;
-  const umbralAcameViento = umbralBase * (0.62 + 0.72 * varCfg.resistenciaViento);
+  const umbralAcameViento = umbralBase * (0.62 + 0.72 * varCfg.resistenciaViento) * factorRigidezK;
   if (d.viento >= umbralAcameViento && etapaActual >= Etapa.V8) {
     p.acameGrados = 55.0;
     if (cfg.acameLetal) {
@@ -874,36 +1122,77 @@ export function pasoDia(p: Planta, d: ClimaDia, cfg = CFG): Planta {
     }
   }
 
-  // 5. Acumulación fenológica de Grados Día (ajustada por tBase/tCorte de la variedad y rCiclo)
-  const deltaGdd = gddDia(d, cfg, varCfg) / Math.max(0.8, Math.min(1.2, rCiclo));
+  // 5. Acumulación fenológica de Grados Día (ajustada por tBase/tCorte y velocidad rCiclo: mayor rCiclo = más rápido)
+  const factorLuz = clamp01(d.factorLuz ?? 1.0);
+  const parEfectivo =
+    d.parDiario !== undefined
+      ? d.parDiario * factorLuz
+      : 1200.0 * (1.0 - 0.55 * Math.pow((d.nubosidad ?? 20) / 100.0, 2.2)) * Math.exp(-(d.pm25 ?? 12) / 900.0) * factorLuz;
+  const fotoNeta = fotosintesisNetaC4(d, parEfectivo, e, cfg);
+  p.fotosintesisUltima = fotoNeta;
+  const fFoto = clamp01((fotoNeta + 2.0) / 30.0); // ~0.85..1.0 en día soleado óptimo; cae con sombra/PM2.5/bajo CO2
+
+  const deltaGdd = gddDia(d, cfg, varCfg) * Math.max(0.8, Math.min(1.2, rCiclo)) * (0.78 + 0.22 * fFoto);
   p.gdd += deltaGdd;
 
-  // Modulaciones por cultivo asociado (Tríada Mesoamericana) y rasgos heredables
+  // Modulaciones por cultivo asociado apilable (Tríada Mesoamericana) y rasgos heredables
+  const conFrijol = Boolean(p.tieneFrijol || p.cultivoAsociado === 'frijol');
+  const conCalabaza = Boolean(p.tieneCalabaza || p.cultivoAsociado === 'calabaza');
   let eHidricoEfectivo = e.hidrico * (1.0 - Math.min(0.85, 0.45 * varCfg.resistenciaSequia * rSequia));
   let eFrioEfectivo = e.frio * (1.0 - Math.min(0.85, 0.55 * varCfg.resistenciaFrio * rFrio));
-  if (p.cultivoAsociado === 'calabaza') {
+  if (conCalabaza) {
     eHidricoEfectivo *= 0.65; // Mulch vivo retiene 35% de evaporación
   }
 
+  // Disponibilidad edáfica real de N, P y K modulada por pH
+  const dispPH = 1.0 - 0.55 * e.pH;
+  const nEff = (d.nSuelo ?? 65) * dispPH;
+  const pEff = (d.pSuelo ?? 65) * dispPH;
+  const kEff = (d.kSuelo ?? 65) * dispPH;
+  const umbralN = varCfg.demandaN === 'Alta' ? 42 : varCfg.demandaN === 'Media' ? 32 : 24;
+  const umbralP = varCfg.demandaP === 'Alta' ? 38 : 28;
+  const umbralK = varCfg.demandaK === 'Alta' ? 38 : 28;
+  const deficitN = nEff < umbralN ? clamp01((umbralN - nEff) / umbralN) : 0;
+  const deficitP = pEff < umbralP ? clamp01((umbralP - pEff) / umbralP) : 0;
+  const deficitK = kEff < umbralK ? clamp01((umbralK - kEff) / umbralK) : 0;
+
+  // Fitopatología real a partir del riesgo fúngico (Huitlacoche en VT..R3 y Roya/Tizón en humedad alta)
+  const riesgoF = clamp01(
+    d.riesgoFungico ??
+      ((d.hr >= 85 ? (d.hr - 85) / 15 : 0) * 0.5 + (d.tMed >= 18 && d.tMed <= 28 ? 0.3 : 0.08) + (d.lluvia > 0 ? 0.2 : 0))
+  );
+  if (riesgoF > 0.68 && etapaActual >= Etapa.V6 && p.estado !== 'MADURA') {
+    p.danoFungico = clamp01((p.danoFungico ?? 0) + (riesgoF - 0.65) * 0.055);
+  } else {
+    p.danoFungico = Math.max(0, (p.danoFungico ?? 0) - 0.015);
+  }
+  if (riesgoF > 0.72 && etapaActual >= Etapa.VT && etapaActual <= Etapa.R3 && d.tMed >= 19 && d.tMed <= 29) {
+    p.huitlacoche = clamp01((p.huitlacoche ?? 0) + (riesgoF - 0.68) * 0.22);
+  }
+
   // 6. Vigor multiplicativo (se actualiza durante el crecimiento activo antes de R6; en madurez se preserva)
-  const eBiotico = e.biotico ?? 0.0;
+  const eBiotico = clamp01((e.biotico ?? 0.0) + (p.danoFungico ?? 0) * 0.45);
+  const eNutri = clamp01(0.5 * deficitN + 0.25 * deficitP + 0.25 * deficitK);
   const penalizacionVigor =
     (1.0 - 0.62 * eHidricoEfectivo) *
     (1.0 - 0.52 * e.calor) *
     (1.0 - 0.52 * eFrioEfectivo) *
     (1.0 - 0.58 * e.ench) *
     (1.0 - 0.35 * e.pH) *
-    (1.0 - 0.50 * eBiotico);
+    (1.0 - 0.40 * eNutri) *
+    (1.0 - 0.50 * eBiotico) *
+    (0.76 + 0.24 * fFoto);
 
   if (deltaGdd > 0.1 && p.estado !== 'MADURA') {
     p.vigor = clamp01((p.vigor * 0.91 + penalizacionVigor * 0.09) * (0.98 + 0.02 * rVigor));
-    if (p.cultivoAsociado === 'frijol') {
-      p.vigor = clamp01(p.vigor + 0.015); // Fijación biológica de N
+    // Fijación biológica de N con Rhizobium (requiere suelo aireado y pH 5.8..7.2)
+    if (conFrijol && d.vwc <= cfg.umbralEncharcamiento && d.ph >= 5.6 && d.ph <= 7.4) {
+      p.vigor = clamp01(p.vigor + 0.015);
     }
     // Bono por encontrarse en la ventana agroclimática favorable de la especie
     const enTempOptima = d.tMed >= varCfg.tempOptimaMin && d.tMed <= varCfg.tempOptimaMax;
     const enVwcOptimo = d.vwc >= varCfg.vwcOptimoMin && d.vwc <= varCfg.vwcOptimoMax;
-    if (enTempOptima && enVwcOptimo && e.globalPonderado < 0.22) {
+    if (enTempOptima && enVwcOptimo && e.globalPonderado < 0.22 && fFoto > 0.65) {
       p.vigor = clamp01(p.vigor + 0.012);
     }
     // Penalizaciones específicas por lo que perjudica a cada especie:
@@ -946,9 +1235,16 @@ export function pasoDia(p: Planta, d: ClimaDia, cfg = CFG): Planta {
   p.sequia = clamp01(p.sequia * 0.72 + eHidricoEfectivo * 0.28);
   p.frio = clamp01(p.frio * 0.70 + eFrioEfectivo * 0.30);
   p.amarillamiento = clamp01(
-    p.amarillamiento + 0.04 * eHidricoEfectivo + 0.025 * e.calor + 0.02 * e.ench + 0.03 * eBiotico
+    p.amarillamiento + 0.04 * eHidricoEfectivo + 0.025 * e.calor + 0.02 * e.ench + 0.03 * eBiotico + 0.035 * deficitN
   );
-  p.antocianina = clamp01(p.antocianina * 0.85 + (p.variedad === 'azul' ? 0.35 : (e.pH + eFrioEfectivo * 0.5) * 0.18));
+  // Recuperación parcial de clorofila cuando N y agua se restauran en etapa vegetativa
+  if (etapaActual < Etapa.R4 && deficitN < 0.1 && eHidricoEfectivo < 0.2 && e.ench < 0.2) {
+    p.amarillamiento = Math.max(0, p.amarillamiento - 0.018);
+  }
+  p.antocianina = clamp01(
+    p.antocianina * 0.85 +
+      (p.variedad === 'azul' ? 0.35 : (e.pH + eFrioEfectivo * 0.5 + deficitP * 0.65) * 0.18)
+  );
 
   const gddV6_var = cfg.gddV6 * escalaCiclo;
   const gddV12_var = cfg.gddV12 * escalaCiclo;
@@ -991,7 +1287,10 @@ export function pasoDia(p: Planta, d: ClimaDia, cfg = CFG): Planta {
     if (p.gdd >= gddVT_var && p.gdd <= gddR2_var) {
       const promedioEstresFlor = p.estresFloracion.reduce((a, b) => a + b, 0) / p.estresFloracion.length;
       p.asiDias = cfg.asiBaseDias + cfg.asiFactorEstres * promedioEstresFlor;
-      p.cuajado = clamp01(1.0 - cfg.cuajadoSensibilidad * promedioEstresFlor);
+      const cuajadoClima = clamp01(1.0 - cfg.cuajadoSensibilidad * promedioEstresFlor);
+      // Si se suministra nivel de polinización real (viento/abejas/manual), pondera directamente el cuajado
+      const factorPolen = d.polinizacionNivel !== undefined ? 0.38 + 0.62 * clamp01(d.polinizacionNivel) : 1.0;
+      p.cuajado = clamp01(cuajadoClima * factorPolen);
       p.aborto = clamp01(1.0 - p.cuajado);
     }
 
@@ -1000,12 +1299,27 @@ export function pasoDia(p: Planta, d: ClimaDia, cfg = CFG): Planta {
     }
 
     if (p.gdd >= gddR2_var) {
-      p.granoLlenado = Math.min(1.0, (p.gdd - gddR2_var) / Math.max(10.0, gddR5_var - gddR2_var)) * p.cuajado;
+      const factorK = 1.0 - 0.18 * deficitK;
+      p.granoLlenado = Math.min(1.0, (p.gdd - gddR2_var) / Math.max(10.0, gddR5_var - gddR2_var)) * p.cuajado * factorK;
       p.estigmaSeco = Math.min(1.0, (p.gdd - gddR2_var) / Math.max(10.0, gddR4_var - gddR2_var));
     }
 
     if (p.gdd >= gddR5_var) {
       p.bracteasSeco = Math.min(1.0, (p.gdd - gddR5_var) / Math.max(10.0, gddR6_var - gddR5_var));
+    }
+
+    // Humedad fisiológica del grano (%): 85% en R2 -> ~72% en R3 (elote tierno) -> ~30% en R6 -> ~13.5% seco en dobla
+    if (p.gdd < gddR2_var) {
+      p.humedadGranoPct = 85;
+    } else if (p.gdd < gddR3_var) {
+      const t = (p.gdd - gddR2_var) / Math.max(1, gddR3_var - gddR2_var);
+      p.humedadGranoPct = Math.round(85 - t * (85 - varCfg.humedadCosechaElotePct));
+    } else if (p.gdd < gddR6_var) {
+      const t = (p.gdd - gddR3_var) / Math.max(1, gddR6_var - gddR3_var);
+      p.humedadGranoPct = Math.round(varCfg.humedadCosechaElotePct - t * (varCfg.humedadCosechaElotePct - 28));
+    } else {
+      const t = clamp01((p.gdd - gddR6_var) / Math.max(1, gddR6_var * 0.35));
+      p.humedadGranoPct = Number((28 - t * (28 - varCfg.humedadCosechaGranoPct)).toFixed(1));
     }
   }
 

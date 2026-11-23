@@ -24,10 +24,10 @@ interface VisualTriadaNodo {
 
 /**
  * M7: Asociación Milpa «Las Tres Hermanas» 3D Interactiva
- * - Frijol trepador (Phaseolus vulgaris): espiral ascendente sobre la caña de maíz que fija nitrógeno (+N/día)
- *   y aporta resistencia contra el acame (viento).
- * - Calabaza rastrera (Cucurbita pepo): hojas anchas a ras de suelo que reducen evaporación (-30%) y
- *   suprimen maleza (-50%), además de flores amarillas que atraen abejas polinizadoras.
+ * - Frijol Ayocote trepador (Phaseolus coccineus): espiral ascendente sobre la caña de maíz que fija nitrógeno (+N/día)
+ *   en suelos aireados con pH adecuado (5.6–7.4) y aporta resistencia contra el acame (viento).
+ * - Calabaza criolla rastrera (Cucurbita pepo): hojas anchas a ras de suelo que reducen evaporación (-35%) y
+ *   suprimen maleza (-65%), además de flores amarillas que atraen abejas polinizadoras.
  */
 export class TriadaViva {
     private scene: Scene;
@@ -38,6 +38,7 @@ export class TriadaViva {
 
     private visuales: VisualTriadaNodo[] = [];
     public onMensajeToast?: (msg: string) => void;
+    public onIngredienteCosechado?: (cultivo: 'frijol' | 'calabaza') => void;
 
     constructor(
         scene: Scene,
@@ -72,8 +73,9 @@ export class TriadaViva {
         matVaina.specularColor = new Color3(0.08, 0.1, 0.06);
 
         const matFlorFrijol = new StandardMaterial('matFlorFrijol', this.scene);
-        matFlorFrijol.diffuseColor = Color3.FromHexString('#f5f3ff');
-        matFlorFrijol.emissiveColor = Color3.FromHexString('#ddd6fe').scale(0.03);
+        // Flores escarlata-coral características del Frijol Ayocote (Phaseolus coccineus)
+        matFlorFrijol.diffuseColor = Color3.FromHexString('#fb7185');
+        matFlorFrijol.emissiveColor = Color3.FromHexString('#e11d48').scale(0.03);
         matFlorFrijol.specularColor = Color3.Black();
 
         const matGuiaCalabaza = new StandardMaterial('matGuiaCalabaza', this.scene);
@@ -351,30 +353,44 @@ export class TriadaViva {
     }
 
     /**
-     * Cosecha vainas de frijol o flor/fruto de calabaza cuando están desarrollados
+     * Cosecha vainas de frijol o flor/fruto de calabaza cuando están desarrollados (1 cosecha por ciclo)
      */
     public cosecharAsociado(nodoId: number, cultivo: 'frijol' | 'calabaza'): { exito: boolean; mensaje: string } {
         const nodo = this.surco.nodos[nodoId];
         if (!nodo) return { exito: false, mensaje: 'Estación inválida.' };
 
         if (cultivo === 'frijol') {
-            if (nodo.frijolVid < 0.45) {
-                const msg = `🫘 El frijol en Estación #${nodoId + 1} aún está creciendo (${Math.round(nodo.frijolVid * 100)}%).`;
+            if (nodo.frijolCosechado) {
+                const msg = `🫘 Ya cosechaste las vainas de Frijol Ayocote en Estación #${nodoId + 1} este ciclo.`;
                 if (this.onMensajeToast) this.onMensajeToast(msg);
                 return { exito: false, mensaje: msg };
             }
+            if (nodo.frijolVid < 0.45) {
+                const msg = `🫘 El frijol ayocote en Estación #${nodoId + 1} aún está creciendo (${Math.round(nodo.frijolVid * 100)}%).`;
+                if (this.onMensajeToast) this.onMensajeToast(msg);
+                return { exito: false, mensaje: msg };
+            }
+            nodo.frijolCosechado = true;
             if (this.canasta) this.canasta.depositarIngrediente('frijol');
+            this.onIngredienteCosechado?.('frijol');
             this.audio.cosecharExito(nodo.posicionMundo);
-            const msg = `🫘 ¡Cosechaste vainas de Frijol de milpa en Estación #${nodoId + 1}!`;
+            const msg = `🫘 ¡Cosechaste vainas de Frijol Ayocote en Estación #${nodoId + 1}!`;
             if (this.onMensajeToast) this.onMensajeToast(msg);
             return { exito: true, mensaje: msg };
         } else {
-            if (nodo.calabazaCobertura < 0.45) {
-                const msg = `🎃 La calabaza en Estación #${nodoId + 1} aún está creciendo (${Math.round(nodo.calabazaCobertura * 100)}%).`;
+            if (nodo.calabazaCosechada) {
+                const msg = `🎃 Ya cosechaste la Calabaza Criolla en Estación #${nodoId + 1} este ciclo.`;
                 if (this.onMensajeToast) this.onMensajeToast(msg);
                 return { exito: false, mensaje: msg };
             }
+            if (nodo.calabazaCobertura < 0.45) {
+                const msg = `🎃 La calabaza criolla en Estación #${nodoId + 1} aún está creciendo (${Math.round(nodo.calabazaCobertura * 100)}%).`;
+                if (this.onMensajeToast) this.onMensajeToast(msg);
+                return { exito: false, mensaje: msg };
+            }
+            nodo.calabazaCosechada = true;
             if (this.canasta) this.canasta.depositarIngrediente('calabaza');
+            this.onIngredienteCosechado?.('calabaza');
             this.audio.cosecharExito(nodo.posicionMundo);
             const msg = `🎃 ¡Cosechaste Calabaza y Flor de Calabaza en Estación #${nodoId + 1}!`;
             if (this.onMensajeToast) this.onMensajeToast(msg);

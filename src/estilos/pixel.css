@@ -18,6 +18,15 @@
   --mc-sombra: #2b2b2b;
   --mc-dorado: #ffd74a;
   --mc-verde: #22c55e;
+  /* Jerarquía unificada de capas Z */
+  --z-hud: 100;
+  --z-hotbar: 900;
+  --z-toast: 1500;
+  --z-drawer: 1800;
+  --z-menu: 2400;
+  --z-modal: 2800;
+  --z-modal-top: 3100;
+  --z-cursor: 3500;
 }
 
 html, body, .hud-milpa, .hud-milpa * {
@@ -108,9 +117,10 @@ canvas#renderCanvas {
 }
 
 .mc-slot.seleccionado {
-  outline: var(--px) solid #ffffff;
-  outline-offset: 2px;
-  box-shadow: 0 0 0 calc(var(--px) * 2) #000000;
+  outline: 3px solid #ffffff;
+  outline-offset: -3px;
+  box-shadow: 0 0 0 2px #000000;
+  z-index: 2;
 }
 
 .mc-slot .cantidad {

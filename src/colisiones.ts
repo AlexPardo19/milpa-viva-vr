@@ -16,11 +16,17 @@ interface CajaSolida {
   maxZ: number;
 }
 
-export const RADIO_JUGADOR = 0.32;
+export const RADIO_JUGADOR = 0.30;
 const cajas: CajaSolida[] = [];
 
+function upsertCaja(caja: CajaSolida): void {
+  const idx = cajas.findIndex((c) => c.nombre === caja.nombre);
+  if (idx >= 0) cajas[idx] = caja;
+  else cajas.push(caja);
+}
+
 export function registrarCaja(nombre: string, cx: number, cz: number, ancho: number, fondo: number): void {
-  cajas.push({
+  upsertCaja({
     nombre,
     minX: cx - ancho / 2,
     maxX: cx + ancho / 2,
@@ -29,9 +35,13 @@ export function registrarCaja(nombre: string, cx: number, cz: number, ancho: num
   });
 }
 
+export function actualizarCaja(nombre: string, cx: number, cz: number, ancho: number, fondo: number): void {
+  registrarCaja(nombre, cx, cz, ancho, fondo);
+}
+
 /**
  * Registra como sólido el contorno en planta de un nodo y sus descendientes.
- * Solo cuentan mallas bajas (que tocan el suelo), para no bloquear con elementos flotantes.
+ * Solo cuentan mallas visibles en la banda corporal del jugador (0.08 m a 1.65 m).
  */
 export function registrarSolidoDesdeNodo(nodo: TransformNode, nombre: string, margen = 0): void {
   nodo.computeWorldMatrix(true);
@@ -40,16 +50,17 @@ export function registrarSolidoDesdeNodo(nodo: TransformNode, nombre: string, ma
   const mallas = nodo.getChildMeshes(false) as Mesh[];
   if (nodo instanceof Mesh) mallas.push(nodo);
   for (const m of mallas) {
+    if (!m.isEnabled() || !m.isVisible) continue;
     if (!m.getTotalVertices || m.getTotalVertices() === 0) continue;
     m.computeWorldMatrix(true);
     const bb = m.getBoundingInfo().boundingBox;
-    if (bb.minimumWorld.y > 0.9) continue; // elementos elevados no bloquean el paso
+    if (bb.minimumWorld.y > 1.65) continue; // elementos elevados (techos, rótulos altos) no bloquean el paso
     if (bb.maximumWorld.y < 0.08) continue; // losas planas no son obstáculos
     min = Vector3.Minimize(min, bb.minimumWorld);
     max = Vector3.Maximize(max, bb.maximumWorld);
   }
   if (!isFinite(min.x)) return;
-  cajas.push({
+  upsertCaja({
     nombre,
     minX: min.x - margen,
     maxX: max.x + margen,

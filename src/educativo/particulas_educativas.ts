@@ -46,6 +46,7 @@ export class ParticulasEducativas {
   // Textura circular de gota celeste
   private crearTexturaGota(): DynamicTexture {
     const tex = new DynamicTexture("texGota", { width: 64, height: 64 }, this.scene, false);
+    tex.hasAlpha = true;
     const ctx = tex.getContext() as any;
     ctx.clearRect(0, 0, 64, 64);
     ctx.fillStyle = "#38bdf8";
@@ -63,6 +64,7 @@ export class ParticulasEducativas {
   // Textura de terrón de tierra
   private crearTexturaTierra(): DynamicTexture {
     const tex = new DynamicTexture("texTierra", { width: 64, height: 64 }, this.scene, false);
+    tex.hasAlpha = true;
     const ctx = tex.getContext() as any;
     ctx.clearRect(0, 0, 64, 64);
     ctx.fillStyle = "#78350f";
@@ -80,6 +82,7 @@ export class ParticulasEducativas {
   // Textura de nube suave de polvo de tierra
   private crearTexturaPolvo(): DynamicTexture {
     const tex = new DynamicTexture("texPolvo", { width: 64, height: 64 }, this.scene, false);
+    tex.hasAlpha = true;
     const ctx = tex.getContext() as any;
     ctx.clearRect(0, 0, 64, 64);
     const grad = ctx.createRadialGradient(32, 32, 4, 32, 32, 28);
@@ -97,6 +100,7 @@ export class ParticulasEducativas {
   // Textura de estrella mágica de nutrientes dorada
   private crearTexturaEstrella(): DynamicTexture {
     const tex = new DynamicTexture("texEstrella", { width: 64, height: 64 }, this.scene, false);
+    tex.hasAlpha = true;
     const ctx = tex.getContext() as any;
     ctx.clearRect(0, 0, 64, 64);
     ctx.fillStyle = "#facc15";
@@ -122,6 +126,7 @@ export class ParticulasEducativas {
   // Textura de chispa verde esmeralda
   private crearTexturaChispaVerde(): DynamicTexture {
     const tex = new DynamicTexture("texChispaVerde", { width: 64, height: 64 }, this.scene, false);
+    tex.hasAlpha = true;
     const ctx = tex.getContext() as any;
     ctx.clearRect(0, 0, 64, 64);
     ctx.fillStyle = "#22c55e";
@@ -139,6 +144,7 @@ export class ParticulasEducativas {
   // Textura de onda concéntrica de agua
   private crearTexturaOnda(): DynamicTexture {
     const tex = new DynamicTexture("texOnda", { width: 64, height: 64 }, this.scene, false);
+    tex.hasAlpha = true;
     const ctx = tex.getContext() as any;
     ctx.clearRect(0, 0, 64, 64);
     ctx.strokeStyle = "rgba(56, 189, 248, 0.85)";
@@ -158,7 +164,9 @@ export class ParticulasEducativas {
   // Textura de confeti festivo
   private crearTexturaConfeti(): DynamicTexture {
     const tex = new DynamicTexture("texConfeti", { width: 64, height: 64 }, this.scene, false);
+    tex.hasAlpha = true;
     const ctx = tex.getContext() as any;
+    ctx.clearRect(0, 0, 64, 64);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(8, 16, 48, 32);
     tex.update();
@@ -194,6 +202,7 @@ export class ParticulasEducativas {
     // 1. Terrones de tierra sólidos
     const ps = new ParticleSystem("psArar", 45, this.scene);
     ps.particleTexture = this.texChispaTierra;
+    ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     ps.emitter = posicion.clone().add(new Vector3(0, 0.12, 0));
     ps.minEmitBox = new Vector3(-0.35, 0, -0.35);
     ps.maxEmitBox = new Vector3(0.35, 0.2, 0.35);
@@ -218,6 +227,7 @@ export class ParticulasEducativas {
     // 2. Nube de polvo suave expansiva
     const psPolvo = new ParticleSystem("psPolvo", 20, this.scene);
     psPolvo.particleTexture = this.texPolvoTierra;
+    psPolvo.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     psPolvo.emitter = posicion.clone().add(new Vector3(0, 0.08, 0));
     psPolvo.minEmitBox = new Vector3(-0.25, 0, -0.25);
     psPolvo.maxEmitBox = new Vector3(0.25, 0.1, 0.25);
@@ -245,6 +255,7 @@ export class ParticulasEducativas {
     // Chorro de gotas
     const ps = new ParticleSystem("psAgua", 150, this.scene);
     ps.particleTexture = this.texGota;
+    ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     ps.emitter = origen.clone();
     ps.minEmitBox = new Vector3(-0.09, -0.05, -0.09);
     ps.maxEmitBox = new Vector3(0.09, 0.05, 0.09);
@@ -253,24 +264,25 @@ export class ParticulasEducativas {
     ps.color2 = new Color4(0.15, 0.65, 0.95, 0.85);
     ps.colorDead = new Color4(0.1, 0.4, 0.9, 0.0);
 
-    ps.minSize = 0.08;
-    ps.maxSize = 0.16;
-    ps.minLifeTime = 0.4;
-    ps.maxLifeTime = 0.7;
-    ps.emitRate = 110;
-    ps.gravity = new Vector3(0, -9.2, 0);
+    ps.minSize = 0.06;
+    ps.maxSize = 0.13;
+    ps.minLifeTime = 0.20;
+    ps.maxLifeTime = 0.40;
+    ps.emitRate = 100;
+    ps.gravity = new Vector3(0, -8.5, 0);
 
     const dir = destino.subtract(origen).normalize();
-    ps.direction1 = dir.add(new Vector3(-0.25, -0.2, -0.25));
-    ps.direction2 = dir.add(new Vector3(0.25, -0.4, 0.25));
-    ps.minEmitPower = 2.0;
-    ps.maxEmitPower = 3.0;
+    ps.direction1 = dir.add(new Vector3(-0.22, -0.15, -0.22));
+    ps.direction2 = dir.add(new Vector3(0.22, -0.32, 0.22));
+    ps.minEmitPower = 1.3;
+    ps.maxEmitPower = 2.1;
     ps.start();
-    this.programarLimpieza(ps, 650, 1500);
+    this.programarLimpieza(ps, 600, 1250);
 
     // Ondas concéntricas en el suelo
     const psOndas = new ParticleSystem("psOndasAgua", 35, this.scene);
     psOndas.particleTexture = this.texOndaAgua;
+    psOndas.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     psOndas.emitter = destino.clone().add(new Vector3(0, 0.04, 0));
     psOndas.minEmitBox = new Vector3(-0.4, 0, -0.4);
     psOndas.maxEmitBox = new Vector3(0.4, 0.02, 0.4);
@@ -300,6 +312,7 @@ export class ParticulasEducativas {
     // 1. Estrellas doradas flotantes
     const psEstrellas = new ParticleSystem("psAbonoEstrellas", 60, this.scene);
     psEstrellas.particleTexture = this.texEstrellaAbono;
+    psEstrellas.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     psEstrellas.emitter = posicion.clone().add(new Vector3(0, 0.35, 0));
     psEstrellas.minEmitBox = new Vector3(-0.5, 0, -0.5);
     psEstrellas.maxEmitBox = new Vector3(0.5, 0.4, 0.5);
@@ -324,6 +337,7 @@ export class ParticulasEducativas {
     // 2. Chispas verdes esmeralda de vitalidad celular
     const psVerde = new ParticleSystem("psAbonoVerde", 50, this.scene);
     psVerde.particleTexture = this.texChispaVerde;
+    psVerde.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     psVerde.emitter = posicion.clone().add(new Vector3(0, 0.2, 0));
     psVerde.minEmitBox = new Vector3(-0.4, 0, -0.4);
     psVerde.maxEmitBox = new Vector3(0.4, 0.3, 0.4);
@@ -386,6 +400,7 @@ export class ParticulasEducativas {
     colores.forEach((col, idx) => {
       const ps = new ParticleSystem(`psConfeti_${idx}`, 35, this.scene);
       ps.particleTexture = this.texConfeti;
+      ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
       ps.emitter = posicion.clone().add(new Vector3(0, 0.5, 0));
       ps.minEmitBox = new Vector3(-0.3, -0.3, -0.3);
       ps.maxEmitBox = new Vector3(0.3, 0.3, 0.3);
@@ -411,6 +426,7 @@ export class ParticulasEducativas {
     // Estrellas doradas ascendentes de trofeo
     const psEstrellas = new ParticleSystem("psCosechaEstrellas", 40, this.scene);
     psEstrellas.particleTexture = this.texEstrellaAbono;
+    psEstrellas.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     psEstrellas.emitter = posicion.clone().add(new Vector3(0, 0.6, 0));
     psEstrellas.color1 = new Color4(1.0, 0.95, 0.4, 1.0);
     psEstrellas.color2 = new Color4(0.98, 0.75, 0.1, 0.9);
@@ -435,7 +451,7 @@ export class ParticulasEducativas {
   }
 
   public emitirGotas(pos: Vector3): void {
-    this.efectoRegar(pos.add(new Vector3(0, 0.5, 0)), pos);
+    this.efectoRegar(pos.add(new Vector3(0, 0.45, 0)), pos);
   }
 
   public emitirOndas(_pos: Vector3): void {
@@ -460,6 +476,7 @@ export class ParticulasEducativas {
   public emitirPolenDorado(pos: Vector3): void {
     const ps = new ParticleSystem("psPolenDorado", 55, this.scene);
     ps.particleTexture = this.texEstrellaAbono;
+    ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     ps.emitter = pos.clone();
     ps.minEmitBox = new Vector3(-0.22, -0.05, -0.22);
     ps.maxEmitBox = new Vector3(0.22, 0.08, 0.22);

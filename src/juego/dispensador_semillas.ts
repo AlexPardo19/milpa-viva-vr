@@ -30,12 +30,12 @@ interface SemillaDispensable {
 }
 
 const CATALOGO_SEMILLAS: SemillaDispensable[] = [
-  { id: "semilla_chalqueno", etiqueta: "Maíz Chalqueño", colorHex: "#eab308", cantidadLote: 16 },
-  { id: "semilla_azul", etiqueta: "Maíz Azul Cónico", colorHex: "#4f46e5", cantidadLote: 16 },
-  { id: "semilla_rojo", etiqueta: "Maíz Rojo Sangre", colorHex: "#dc2626", cantidadLote: 16 },
-  { id: "semilla_palomero", etiqueta: "Palomero Toluqueño", colorHex: "#f59e0b", cantidadLote: 16 },
-  { id: "frijol", etiqueta: "Frijol Ayocote", colorHex: "#9333ea", cantidadLote: 16 },
-  { id: "calabaza", etiqueta: "Calabaza Criolla", colorHex: "#ea580c", cantidadLote: 16 }
+  { id: "semilla_chalqueno", etiqueta: "Maíz Chalqueño", colorHex: "#eab308", cantidadLote: 6 },
+  { id: "semilla_azul", etiqueta: "Maíz Azul Cónico", colorHex: "#4f46e5", cantidadLote: 6 },
+  { id: "semilla_rojo", etiqueta: "Maíz Rojo", colorHex: "#dc2626", cantidadLote: 6 },
+  { id: "semilla_palomero", etiqueta: "Maíz Palomero", colorHex: "#f59e0b", cantidadLote: 6 },
+  { id: "frijol", etiqueta: "Frijol Ayocote", colorHex: "#9333ea", cantidadLote: 6 },
+  { id: "calabaza", etiqueta: "Calabaza Criolla", colorHex: "#ea580c", cantidadLote: 6 }
 ];
 
 /**
@@ -223,7 +223,7 @@ export class DispensadorSemillas {
         ctx.textAlign = "center";
         ctx.font = "bold 20px 'Pixelify Sans', monospace";
         const l1 = i < 4 ? "MAÍZ" : partes[0].toUpperCase();
-        const l2 = i < 4 ? partes[partes.length - 1] === "Cónico" ? "AZUL" : partes[partes.length - 1].toUpperCase() : "";
+        const l2 = i < 4 ? (partes[1] || "").toUpperCase() : "";
         ctx.fillText(l1, w / 2, 46);
         if (l2) ctx.fillText(l2, w / 2, 76);
         else {
@@ -284,7 +284,7 @@ export class DispensadorSemillas {
       position: fixed;
       inset: 0;
       background: rgba(5, 10, 8, 0.72);
-      z-index: 2300;
+      z-index: 2800;
       display: none;
       align-items: center;
       justify-content: center;
@@ -309,14 +309,14 @@ export class DispensadorSemillas {
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #777; padding-bottom:8px;">
         <div>
           <div style="font-size:18px; font-weight:700; color:#14532d;">🌰 Dispensador Comunal de Semillas</div>
-          <div style="font-size:12px; color:#334155;">Repón cualquier raza de maíz criollo, frijol o calabaza si se agotan en tu parcela.</div>
+          <div style="font-size:12px; color:#334155;">Dotación comunal de respaldo (hasta 12 semillas/especie). Para más semillas mejoradas, desgrana tus mazorcas en el Banco de Semillas.</div>
         </div>
         <button id="btnCerrarDispensador" class="mc-boton" style="background:#991b1b; color:#fff; padding:4px 10px; font-size:14px;">✕</button>
       </div>
       <div id="dispensadorLista" style="display:grid; grid-template-columns:1fr; gap:8px;"></div>
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding-top:6px; border-top:2px solid #777;">
         <button id="btnRecargarTodasSemillas" class="mc-boton" style="background:#15803d; color:#fff; padding:8px 14px; font-size:13px; flex:1;">
-          ✨ Recargar Todas (+16 c/u)
+          ✨ Reponer Faltantes (hasta 6 c/u)
         </button>
         <button id="btnListoDispensador" class="mc-boton" style="background:#475569; color:#fff; padding:8px 14px; font-size:13px;">
           Cerrar [Esc]
@@ -334,16 +334,20 @@ export class DispensadorSemillas {
     card.querySelector("#btnRecargarTodasSemillas")?.addEventListener("click", () => {
       let recibidas = 0;
       for (const s of CATALOGO_SEMILLAS) {
-        const res = this.invJugador.agregar({ id: s.id, cantidad: s.cantidadLote });
-        recibidas += s.cantidadLote - res.sobrante;
+        const actuales = this.invJugador.contar(s.id);
+        const faltan = Math.max(0, s.cantidadLote - actuales);
+        if (faltan > 0) {
+          const res = this.invJugador.agregar({ id: s.id, cantidad: faltan });
+          recibidas += faltan - res.sobrante;
+        }
       }
       this.audio.semillas();
       this.renderLista();
       this.onActualizarUI?.();
       this.onMensajeToast?.(
         recibidas > 0
-          ? `🌰 ¡Dispensador entregó ${recibidas} semillas variadas a tu inventario!`
-          : "🎒 Tu mochila ya tiene espacio completo para estas semillas."
+          ? `🌰 ¡Dispensador repuso ${recibidas} semillas faltantes en tu mochila!`
+          : "🌰 Ya tienes al menos 6 semillas de cada especie. Desgrana mazorcas en el Banco para lotes mayores."
       );
     });
     modal.addEventListener("click", (ev) => {
@@ -376,7 +380,7 @@ export class DispensadorSemillas {
         <div>
           <div style="font-size:13px; font-weight:700; text-shadow:1px 1px 0 #000;">${s.etiqueta}</div>
           <div style="font-size:11px; color:${total === 0 ? "#fecaca" : "#dcfce7"};">
-            En inventario: <strong>${total}</strong>${total === 0 ? " (¡Agotada!)" : ""}
+            En inventario: <strong>${total}</strong>${total === 0 ? " (¡Agotada!)" : total >= 12 ? " (Límite comunal)" : ""}
           </div>
         </div>
       `;
@@ -384,27 +388,29 @@ export class DispensadorSemillas {
       const der = document.createElement("div");
       der.style.cssText = "display:flex; gap:6px; flex-shrink:0;";
 
-      const btn16 = document.createElement("button");
-      btn16.className = "mc-boton";
-      btn16.style.cssText = "background:#0369a1; color:#fff; padding:5px 10px; font-size:12px;";
-      btn16.textContent = `+${s.cantidadLote}`;
-      btn16.addEventListener("click", () => this.entregarSemilla(s, s.cantidadLote));
+      const btnLote = document.createElement("button");
+      btnLote.className = "mc-boton";
+      btnLote.style.cssText = "background:#0369a1; color:#fff; padding:5px 10px; font-size:12px;";
+      btnLote.textContent = `+${s.cantidadLote}`;
+      btnLote.disabled = total >= 12;
+      btnLote.addEventListener("click", () => this.entregarSemilla(s, s.cantidadLote));
 
-      const btn64 = document.createElement("button");
-      btn64.className = "mc-boton";
-      btn64.style.cssText = "background:#a16207; color:#fff; padding:5px 10px; font-size:12px;";
-      btn64.textContent = "Llenar (64)";
-      btn64.addEventListener("click", () => this.entregarSemilla(s, 64));
-
-      der.append(btn16, btn64);
+      der.append(btnLote);
       fila.append(izq, der);
       this.listaEl.appendChild(fila);
     }
   }
 
   private entregarSemilla(s: SemillaDispensable, cantidad: number): void {
-    const res = this.invJugador.agregar({ id: s.id, cantidad });
-    const entregadas = cantidad - res.sobrante;
+    const limiteComunal = 12;
+    const actuales = this.invJugador.contar(s.id);
+    const permitidas = Math.max(0, Math.min(cantidad, limiteComunal - actuales));
+    if (permitidas <= 0) {
+      this.onMensajeToast?.(`🌰 Ya tienes ${actuales} semillas de ${s.etiqueta} (máx. comunal: ${limiteComunal}). Desgrana mazorcas en el Banco para obtener más.`);
+      return;
+    }
+    const res = this.invJugador.agregar({ id: s.id, cantidad: permitidas });
+    const entregadas = permitidas - res.sobrante;
     this.audio.semillas();
     this.renderLista();
     this.onActualizarUI?.();

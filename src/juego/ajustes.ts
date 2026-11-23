@@ -40,6 +40,7 @@ export const AJUSTES_DEFECTO: AjustesConfig = {
 export class AjustesSistema {
   public valores: AjustesConfig = { ...AJUSTES_DEFECTO };
   public pausado = false;
+  public onBorrarProgreso?: () => void;
 
   private vinetaElem: HTMLDivElement | null = null;
   private subtituloElem: HTMLDivElement | null = null;
@@ -225,7 +226,7 @@ export class AjustesSistema {
       padding: "16px 20px",
       fontFamily: "'Pixelify Sans', 'VT323', monospace",
       color: "#1e1e1e",
-      zIndex: "2500",
+      zIndex: "3100",
       display: "none",
       boxShadow: "0 0 0 4px #000000"
     });
@@ -335,7 +336,8 @@ export class AjustesSistema {
         localStorage.removeItem("milpaviva.banco.v1");
         localStorage.removeItem("milpaviva.codice.v1");
       } catch {}
-      this.mostrarSubtitulo("♻️ Progreso de semillas y códice reiniciado.");
+      this.onBorrarProgreso?.();
+      this.mostrarSubtitulo("♻️ Progreso de semillas y códice reiniciado en memoria y almacenamiento.");
     });
   }
 }

@@ -920,7 +920,7 @@ export class AmbienteEstilizado {
       p.material = matOscura;
       p.parent = shedRoot;
       p.receiveShadows = true;
-      registrarCaja(`posteCobertizo_${i}`, x, -3.8 + z, 0.15, 0.15);
+      registrarCaja(`posteCobertizo_${i}`, x, -3.8 + z, 0.28, 0.28);
       this.shadowGen.addShadowCaster(p);
       p.freezeWorldMatrix();
 
@@ -978,6 +978,7 @@ export class AmbienteEstilizado {
     murete.parent = shedRoot;
     murete.receiveShadows = true;
     this.shadowGen.addShadowCaster(murete);
+    registrarCaja("mureteFondoCobertizo", 0, -3.8 - 0.70, 2.38, 0.24);
     murete.freezeWorldMatrix();
 
     // Techo a dos aguas de paja dorada escalonada estilo Patrix
@@ -1311,7 +1312,7 @@ export class AmbienteEstilizado {
     const factorLluvia = clamp01(clima.lluvia / 25);
     const factorPM = clamp01((clima.pm25 - 15) / 110);
     const factorNiebla = clamp01(
-      Math.max(factorNub * 0.28, (metricas.niebla ? 0.35 : 0) + Math.max(0, (clima.humedad - 74) / 26))
+      Math.max(factorNub * 0.28, metricas.niebla * 0.65 + Math.max(0, (clima.humedad - 74) / 26))
     );
     const factorTormenta = clamp01(factorNub * 0.55 + factorLluvia * 0.65);
 
@@ -1380,7 +1381,7 @@ export class AmbienteEstilizado {
     this.matStarA.alpha = mostrarEstrellas ? this.intensidadStarBase * 0.92 : 0;
     this.matStarB.alpha = mostrarEstrellas ? this.intensidadStarBase * 0.88 : 0;
 
-    // 2. Luz direccional unificada (crossfade suave Sol <-> Luna con sombras continuas)
+    // 2. Luz direccional unificada (crossfade suave Sol <-> Luna con atenuación a 0 en el cruce para evitar saltos de sombra)
     const usarLuna = elevDeg < -1.5;
     const lightDirX = usarLuna ? -dirX : dirX;
     const lightDirY = Math.max(usarLuna ? 0.20 : 0.14, usarLuna ? -dirY : dirY);
@@ -1394,10 +1395,11 @@ export class AmbienteEstilizado {
     this.sunLight.direction.set(-lx, -ly, -lz);
 
     const sunIntens =
-      smoothstep(-1.5, 16.0, elevDeg) * (3.75 - 2.30 * factorNub - 0.65 * factorLluvia);
+      smoothstep(-1.0, 16.0, elevDeg) * (3.75 - 2.30 * factorNub - 0.65 * factorLluvia);
     const moonIntens =
-      smoothstep(-1.5, -9.0, elevDeg) * (0.64 - 0.30 * factorNub - 0.14 * factorLluvia);
-    this.sunLight.intensity = Math.max(0.06, sunIntens + moonIntens);
+      smoothstep(-2.0, -9.0, elevDeg) * (0.64 - 0.30 * factorNub - 0.14 * factorLluvia);
+    const factorCruce = smoothstep(0.0, 0.9, Math.abs(elevDeg + 1.5));
+    this.sunLight.intensity = Math.max(0.01, (sunIntens + moonIntens) * factorCruce);
 
     const colorSolZenit = new Color3(1.0, 0.93, 0.80);
     const colorSolCrep = esAtardecer

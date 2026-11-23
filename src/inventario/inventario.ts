@@ -1,8 +1,8 @@
 /**
- * Modelo de Datos del Inventario Estilo Minecraft (v4.0 — Milpa Viva VR)
+ * Modelo de Datos del Inventario Estilo Minecraft (v4.1 — Milpa Viva VR)
  *
- * Soporta ranuras fijas, apilado hasta maxStack (64 o 1), clasificación por variedad
- * y calidad de grano/mazorca, eventos reactivos y persistencia.
+ * Fuente única de verdad para herramientas, semillas, cosechas (elote R3 vs grano seco R6),
+ * huitlacoche y quelites, con notificaciones por lote y consumo consciente de variedad.
  */
 
 import { TipoSemilla } from "../nucleo";
@@ -24,6 +24,7 @@ export interface ItemStack {
   meta?: {
     variedad?: string;
     calidad?: number; // 0..1
+    madurez?: "elote" | "grano_seco";
   };
 }
 
@@ -34,7 +35,7 @@ export const DEFS: Record<string, DefItem> = {
     icono: "mano",
     maxStack: 1,
     categoria: "herramienta",
-    descripcion: "Palpa plantas, deshierba y recoge maleza con tus manos"
+    descripcion: "Palpa plantas, deshierba y retira plagas con tus manos"
   },
   azada: {
     id: "azada",
@@ -42,7 +43,7 @@ export const DEFS: Record<string, DefItem> = {
     icono: "azada",
     maxStack: 1,
     categoria: "herramienta",
-    descripcion: "Labra y airea los surcos para preparar la tierra"
+    descripcion: "Labra los surcos y abre zanjas de drenaje en suelos encharcados"
   },
   semilla: {
     id: "semilla",
@@ -58,15 +59,15 @@ export const DEFS: Record<string, DefItem> = {
     icono: "regadera",
     maxStack: 1,
     categoria: "herramienta",
-    descripcion: "Riega la tierra para mantener la humedad óptima"
+    descripcion: "Riega la tierra para mantener la humedad óptima de cada raza"
   },
   abono: {
     id: "abono",
-    nombre: "Abono Orgánico (Composta)",
+    nombre: "Abono Orgánico (Composta NPK)",
     icono: "abono",
     maxStack: 64,
     categoria: "insumo",
-    descripcion: "Nutrientes orgánicos para el desarrollo del maíz"
+    descripcion: "Nutrientes N-P-K orgánicos para el vigor y llenado de grano"
   },
   sol: {
     id: "sol",
@@ -74,7 +75,7 @@ export const DEFS: Record<string, DefItem> = {
     icono: "sol",
     maxStack: 1,
     categoria: "insumo",
-    descripcion: "Acelera el ciclo biológico de la milpa"
+    descripcion: "Acelera el ciclo biológico de la milpa con autopausa en alertas"
   },
   guante: {
     id: "guante",
@@ -90,7 +91,7 @@ export const DEFS: Record<string, DefItem> = {
     icono: "mazorca",
     maxStack: 1,
     categoria: "herramienta",
-    descripcion: "Pizca mazorcas listas para el troje"
+    descripcion: "Pizca elotes tiernos (R3) o mazorcas secas de semilla (R6)"
   },
   mazorca: {
     id: "mazorca",
@@ -98,7 +99,23 @@ export const DEFS: Record<string, DefItem> = {
     icono: "mazorca",
     maxStack: 64,
     categoria: "cosecha",
-    descripcion: "Fruto de la milpa, listo para almacenar o desgranar"
+    descripcion: "Fruto de la milpa: almacénalo en la troje, cocínalo o desgránalo en semilla"
+  },
+  huitlacoche: {
+    id: "huitlacoche",
+    nombre: "Huitlacoche Gourmet",
+    icono: "huitlacoche",
+    maxStack: 64,
+    categoria: "cosecha",
+    descripcion: "Hongo comestible Ustilago maydis apreciado en la alta cocina mexicana"
+  },
+  quelite: {
+    id: "quelite",
+    nombre: "Quelites de la Milpa",
+    icono: "abono",
+    maxStack: 64,
+    categoria: "cosecha",
+    descripcion: "Quintonil, verdolaga, quelite cenizo y epazote frescos para el Fogón"
   },
   grano: {
     id: "grano",
@@ -106,7 +123,7 @@ export const DEFS: Record<string, DefItem> = {
     icono: "grano",
     maxStack: 64,
     categoria: "semilla",
-    descripcion: "Semilla criolla para continuar el ciclo agrícola"
+    descripcion: "Semilla criolla desgranada para continuar el ciclo agrícola"
   },
   frijol: {
     id: "frijol",
@@ -114,7 +131,7 @@ export const DEFS: Record<string, DefItem> = {
     icono: "frijol",
     maxStack: 64,
     categoria: "semilla",
-    descripcion: "Fija nitrógeno en el suelo y se enreda en el tallo del maíz"
+    descripcion: "Phaseolus coccineus: fija nitrógeno (Rhizobium) y refuerza el tallo"
   },
   calabaza: {
     id: "calabaza",
@@ -122,7 +139,7 @@ export const DEFS: Record<string, DefItem> = {
     icono: "calabaza",
     maxStack: 64,
     categoria: "semilla",
-    descripcion: "Cubre el suelo conservando la humedad y controlando malezas"
+    descripcion: "Cucurbita pepo: acolchado vivo que conserva humedad y frena malezas"
   },
   semilla_chalqueno: {
     id: "semilla_chalqueno",
@@ -130,23 +147,23 @@ export const DEFS: Record<string, DefItem> = {
     icono: "grano_chalqueno",
     maxStack: 64,
     categoria: "semilla",
-    descripcion: "Raza nativa de grano dorado y gran vigor; siembra en cualquier casilla"
+    descripcion: "Raza dentada de Valles Altos (3.5 m), alto rendimiento y demanda de NPK"
   },
   semilla_azul: {
     id: "semilla_azul",
-    nombre: "Semilla Maíz Azul",
+    nombre: "Semilla Maíz Azul Cónico",
     icono: "grano_azul",
     maxStack: 64,
     categoria: "semilla",
-    descripcion: "Raza cónica rica en antocianinas y tolerancia al frío"
+    descripcion: "Raza de alta montaña rica en antocianinas y gran resistencia a heladas"
   },
   semilla_rojo: {
     id: "semilla_rojo",
-    nombre: "Semilla Maíz Rojo",
+    nombre: "Semilla Maíz Rojo (Sangre de Cristo)",
     icono: "grano_rojo",
     maxStack: 64,
     categoria: "semilla",
-    descripcion: "Sangre de Cristo: ciclo rápido resistente a sequía moderada"
+    descripcion: "Cónico Norteño: campeón en secano y sequía, sensible al encharcamiento"
   },
   semilla_palomero: {
     id: "semilla_palomero",
@@ -154,7 +171,7 @@ export const DEFS: Record<string, DefItem> = {
     icono: "grano_palomero",
     maxStack: 64,
     categoria: "semilla",
-    descripcion: "Raza antigua de altiplano frío con espigas ramificadas"
+    descripcion: "Subespecie everta reventadora de porte bajo (2.1 m) y doble raíz zanco"
   }
 };
 
@@ -185,7 +202,7 @@ export function itemIdSemillaPorVariedad(v: TipoSemilla): string {
 export const tierCalidad = (c = 0.5): number => (c >= 0.85 ? 2 : c >= 0.6 ? 1 : 0);
 
 export const claveItem = (s: ItemStack): string =>
-  `${s.id}|${s.meta?.variedad ?? ""}|${tierCalidad(s.meta?.calidad)}`;
+  `${s.id}|${s.meta?.variedad ?? ""}|${s.meta?.madurez ?? ""}|${tierCalidad(s.meta?.calidad)}`;
 
 export const mismaClase = (a: ItemStack, b: ItemStack): boolean =>
   claveItem(a) === claveItem(b);
@@ -211,10 +228,7 @@ export class Inventario {
     }
   }
 
-  /**
-   * Añade una pila; devuelve la cantidad que NO cupo (0 si todo cupo).
-   */
-  anadir(stack: ItemStack): number {
+  private anadirSilencioso(stack: ItemStack): number {
     if (stack.cantidad <= 0) return 0;
     const def = DEFS[stack.id] || { maxStack: 64 };
     const max = def.maxStack;
@@ -244,6 +258,14 @@ export class Inventario {
       }
     }
 
+    return resto;
+  }
+
+  /**
+   * Añade una pila; devuelve la cantidad que NO cupo (0 si todo cupo).
+   */
+  anadir(stack: ItemStack): number {
+    const resto = this.anadirSilencioso(stack);
     this.notificar();
     return resto;
   }
@@ -296,6 +318,48 @@ export class Inventario {
     return true;
   }
 
+  /**
+   * Consume 1 mazorca (priorizando la variedad preferida si se indica) y devuelve sus metadatos reales.
+   */
+  consumirMazorca(variedadPreferida?: string): {
+    exito: boolean;
+    variedad?: string;
+    calidad: number;
+    madurez?: "elote" | "grano_seco";
+  } {
+    const prefLower = variedadPreferida?.toLowerCase();
+    let idx = -1;
+    if (prefLower) {
+      idx = this.slots.findIndex(
+        (s) =>
+          s &&
+          s.id === "mazorca" &&
+          s.cantidad > 0 &&
+          (s.meta?.variedad || "").toLowerCase().includes(prefLower)
+      );
+    }
+    if (idx < 0) {
+      idx = this.slots.findIndex((s) => s && s.id === "mazorca" && s.cantidad > 0);
+    }
+    if (idx < 0) return { exito: false, calidad: 0 };
+
+    const s = this.slots[idx]!;
+    const variedad = s.meta?.variedad || "chalqueno";
+    const calidad = s.meta?.calidad ?? 0.85;
+    const madurez = s.meta?.madurez;
+    s.cantidad -= 1;
+    if (s.cantidad <= 0) this.slots[idx] = null;
+    this.notificar();
+    return { exito: true, variedad, calidad, madurez };
+  }
+
+  limpiar(): void {
+    for (let i = 0; i < this.slots.length; i++) {
+      this.slots[i] = null;
+    }
+    this.notificar();
+  }
+
   cuentaPorVariedad(id: string, variedad: string): number {
     let total = 0;
     for (let i = 0; i < this.slots.length; i++) {
@@ -311,7 +375,7 @@ export class Inventario {
    * Mueve una cantidad del slot `i` a otro inventario (p. ej. Shift+Clic).
    * Devuelve lo que no cupo en el destino.
    */
-  moverA(destino: Inventario, i: number, cantidad?: number): number {
+  moverA(destino: Inventario, i: number, cantidad?: number, silenciarNotif = false): number {
     const s = this.slots[i];
     if (!s) return 0;
     const n = Math.min(cantidad ?? s.cantidad, s.cantidad);
@@ -323,7 +387,7 @@ export class Inventario {
       meta: s.meta ? { ...s.meta } : undefined
     };
 
-    const sobra = destino.anadir(copiaParaDestino);
+    const sobra = destino.anadirSilencioso(copiaParaDestino);
     const transferido = n - sobra;
     s.cantidad -= transferido;
 
@@ -331,21 +395,32 @@ export class Inventario {
       this.slots[i] = null;
     }
 
-    this.notificar();
-    destino.notificar();
+    if (!silenciarNotif && transferido > 0) {
+      this.notificar();
+      destino.notificar();
+    }
     return sobra;
   }
 
   /**
-   * Mueve todos los ítems de un tipo (o todos si no se pasa id) hacia el inventario destino.
+   * Mueve todos los ítems de un tipo (o todos desde `desdeSlot`) hacia el inventario destino
+   * con una sola notificación por lote. Devuelve la cantidad total movida.
    */
-  moverTodoDe(destino: Inventario, id?: string): void {
-    for (let i = 0; i < this.slots.length; i++) {
+  moverTodoDe(destino: Inventario, id?: string, desdeSlot = 0): number {
+    let totalMovido = 0;
+    for (let i = desdeSlot; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (s && (!id || s.id === id)) {
-        this.moverA(destino, i);
+        const cantAntes = s.cantidad;
+        const sobra = this.moverA(destino, i, cantAntes, true);
+        totalMovido += cantAntes - sobra;
       }
     }
+    if (totalMovido > 0) {
+      this.notificar();
+      destino.notificar();
+    }
+    return totalMovido;
   }
 
   /**
@@ -361,11 +436,11 @@ export class Inventario {
       }
     }
 
-    // Compactar
+    // Compactar respetando mismaClase (variedad + madurez + tierCalidad)
     for (let i = 0; i < stacks.length; i++) {
       const a = stacks[i];
       if (a.cantidad <= 0) continue;
-      const max = (DEFS[a.id]?.maxStack ?? 64);
+      const max = DEFS[a.id]?.maxStack ?? 64;
       for (let j = i + 1; j < stacks.length; j++) {
         const b = stacks[j];
         if (b.cantidad > 0 && mismaClase(a, b)) {
@@ -380,7 +455,6 @@ export class Inventario {
     }
 
     const validos = stacks.filter((s) => s.cantidad > 0);
-    // Ordenar por tipo de ítem y variedad
     validos.sort((a, b) => {
       if (a.id !== b.id) return a.id.localeCompare(b.id);
       const varA = a.meta?.variedad || "";

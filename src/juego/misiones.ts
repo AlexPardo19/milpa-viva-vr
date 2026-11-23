@@ -13,77 +13,81 @@ export interface MisionMilpa {
     codicePremio?: string;
 }
 
+export interface MisionesSnapshot {
+    progresoPorId: Record<string, { progreso: number; completada: boolean }>;
+    triadaCultivos: string[];
+    hitoCalendarioActual: string;
+}
+
+const MISIONES_BASE: Omit<MisionMilpa, 'progreso' | 'completada'>[] = [
+    {
+        id: 'mis_primer_surco',
+        categoria: 'Guiada',
+        titulo: 'Labranza y Siembra del Surco',
+        descripcion: 'Ara con la azada [2] y siembra tu primera semilla nativa en la hilera.',
+        meta: 1,
+        codicePremio: 'feno_vegetativo'
+    },
+    {
+        id: 'mis_tres_hermanas',
+        categoria: 'Guiada',
+        titulo: 'Alianza de las Tres Hermanas',
+        descripcion: 'Asocia tanto Frijol Ayocote [B] como Calabaza Criolla [N] junto a tu maíz.',
+        meta: 2,
+        codicePremio: 'eco_tres_hermanas'
+    },
+    {
+        id: 'mis_quelites',
+        categoria: 'Estacional',
+        titulo: 'Cosecha de Quelites y Control Biológico',
+        descripcion: 'Arranca maleza/quelites de raíz [X] o retira una plaga activa de la milpa.',
+        meta: 2,
+        codicePremio: 'eco_quelites'
+    },
+    {
+        id: 'mis_polinizacion',
+        categoria: 'Estacional',
+        titulo: 'Lluvia Dorada de Polen',
+        descripcion: 'Sacude la espiga en floración [P] (VT–R2) para asegurar el llenado completo de granos.',
+        meta: 1,
+        codicePremio: 'feno_floracion'
+    },
+    {
+        id: 'mis_clima',
+        categoria: 'Estacional',
+        titulo: 'Guardián del Clima de la Milpa',
+        descripcion: 'Supera un evento meteorológico protegiendo tus cultivos (Petate [G], Tutor [T], drenaje [2] o riego [7]).',
+        meta: 1,
+        codicePremio: 'cal_santa_cruz'
+    },
+    {
+        id: 'mis_comal',
+        categoria: 'Maestría',
+        titulo: 'Del Surco al Comal: Nixtamalización',
+        descripcion: 'Cosecha una mazorca y prepara un platillo tradicional en el Fogón de Cocina [F].',
+        meta: 1,
+        codicePremio: 'gastro_nixtamal'
+    },
+    {
+        id: 'mis_seleccion_semilla',
+        categoria: 'Maestría',
+        titulo: 'Guardián de Semillas Criollas',
+        descripcion: 'Realiza selección masal o trueque con una mazorca cosechada en el Banco de Semillas [M].',
+        meta: 1,
+        codicePremio: 'cal_feria_semilla'
+    }
+];
+
 /**
- * M10: Sistema de Misiones, Retos de Maestría y Calendario Ritual Agrícola
- * Escucha eventos de BusEventos sin acoplamiento directo y desbloquea páginas del Códice.
+ * M10: Sistema de Misiones, Retos de Maestría y Calendario Ritual Agrícola (v4.1)
  */
 export class MisionesSistema {
     private bus: BusEventos;
     private codice: CodiceMaiz;
     private audio: AudioSintetizador;
 
-    public misiones: MisionMilpa[] = [
-        {
-            id: 'mis_primer_surco',
-            categoria: 'Guiada',
-            titulo: 'Labranza y Siembra del Surco',
-            descripcion: 'Ara con la azada y siembra tu primera semilla nativa en la hilera.',
-            progreso: 0,
-            meta: 1,
-            completada: false,
-            codicePremio: 'feno_vegetativo'
-        },
-        {
-            id: 'mis_tres_hermanas',
-            categoria: 'Guiada',
-            titulo: 'Alianza de las Tres Hermanas',
-            descripcion: 'Siembra Frijol [B] o Calabaza [N] junto a tu maíz para activar la simbiosis.',
-            progreso: 0,
-            meta: 2,
-            completada: false,
-            codicePremio: 'eco_tres_hermanas'
-        },
-        {
-            id: 'mis_quelites',
-            categoria: 'Estacional',
-            titulo: 'Cosecha de Quelites y Control Biológico',
-            descripcion: 'Arranca maleza/quelites de raíz [X] o retira una plaga de la milpa.',
-            progreso: 0,
-            meta: 2,
-            completada: false,
-            codicePremio: 'eco_quelites'
-        },
-        {
-            id: 'mis_polinizacion',
-            categoria: 'Estacional',
-            titulo: 'Lluvia Dorada de Polen',
-            descripcion: 'Sacude la espiga en floración [P] para asegurar el llenado completo de granos.',
-            progreso: 0,
-            meta: 1,
-            completada: false,
-            codicePremio: 'feno_floracion'
-        },
-        {
-            id: 'mis_comal',
-            categoria: 'Maestría',
-            titulo: 'Del Surco al Comal: Nixtamalización',
-            descripcion: 'Prepara tu primer platillo tradicional en el Fogón de Cocina [F].',
-            progreso: 0,
-            meta: 1,
-            completada: false,
-            codicePremio: 'gastro_nixtamal'
-        },
-        {
-            id: 'mis_seleccion_semilla',
-            categoria: 'Maestría',
-            titulo: 'Guardián de Semillas Criollas',
-            descripcion: 'Cosecha una mazorca madura o selecciona una nueva generación en el Banco de Semillas [M].',
-            progreso: 0,
-            meta: 1,
-            completada: false,
-            codicePremio: 'cal_feria_semilla'
-        }
-    ];
+    public misiones: MisionMilpa[] = [];
+    private triadaCultivos = new Set<string>();
 
     public hitoCalendarioActual: string = '🕯️ 2 de Febrero: Bendición de Semillas';
     public onActualizarUI?: () => void;
@@ -94,7 +98,19 @@ export class MisionesSistema {
         this.codice = codice;
         this.audio = audio;
 
+        this.reiniciar(false);
         this.suscribirEventos();
+    }
+
+    public reiniciar(notificar = true): void {
+        this.misiones = MISIONES_BASE.map((m) => ({
+            ...m,
+            progreso: 0,
+            completada: false
+        }));
+        this.triadaCultivos.clear();
+        this.hitoCalendarioActual = '🕯️ 2 Feb: Bendición de Semillas (Preparación)';
+        if (notificar && this.onActualizarUI) this.onActualizarUI();
     }
 
     private suscribirEventos(): void {
@@ -105,11 +121,14 @@ export class MisionesSistema {
                     if (ev.variedad.toLowerCase().includes('azul')) this.codice.desbloquear('raza_azul');
                     if (ev.variedad.toLowerCase().includes('rojo')) this.codice.desbloquear('raza_rojo');
                     if (ev.variedad.toLowerCase().includes('palomero')) this.codice.desbloquear('raza_palomero');
-                    if (ev.variedad.toLowerCase().includes('tuxpe')) this.codice.desbloquear('raza_tuxpeno');
                     break;
 
                 case 'triada':
-                    this.avanzarMision('mis_tres_hermanas', 1);
+                    // Exigir tanto frijol como calabaza distintos para completar la Alianza de las Tres Hermanas
+                    if (!this.triadaCultivos.has(ev.cultivo)) {
+                        this.triadaCultivos.add(ev.cultivo);
+                        this.avanzarMision('mis_tres_hermanas', 1);
+                    }
                     break;
 
                 case 'deshierbe':
@@ -117,6 +136,8 @@ export class MisionesSistema {
                     break;
 
                 case 'plaga':
+                    // Solo contar si la plaga fue realmente resuelta/retirada (no al aparecer)
+                    if (!ev.resuelta) break;
                     this.avanzarMision('mis_quelites', 1);
                     this.codice.desbloquear('eco_aliados');
                     break;
@@ -125,12 +146,24 @@ export class MisionesSistema {
                     this.avanzarMision('mis_polinizacion', 1);
                     break;
 
+                case 'evento':
+                    if (ev.resultado === 'superado') {
+                        this.avanzarMision('mis_clima', 1);
+                    }
+                    break;
+
                 case 'cocinado':
                     this.avanzarMision('mis_comal', 1);
                     this.codice.desbloquear('gastro_banquete');
+                    if (ev.receta === 'quesadilla_huitlacoche') {
+                        this.codice.desbloquear('eco_huitlacoche');
+                    }
                     break;
 
                 case 'cosecha':
+                    this.codice.desbloquear('feno_madurez');
+                    break;
+
                 case 'semillaGuardada':
                     this.avanzarMision('mis_seleccion_semilla', 1);
                     this.codice.desbloquear('feno_madurez');
@@ -163,7 +196,7 @@ export class MisionesSistema {
     }
 
     /**
-     * Actualiza el hito del calendario agrícola mesoamericano según el día del ciclo (0..165)
+     * Actualiza el hito del calendario agrícola mesoamericano según el día máximo del ciclo
      */
     public actualizarCalendarioRitual(dia: number): void {
         if (dia < 15) {
@@ -171,7 +204,7 @@ export class MisionesSistema {
         } else if (dia < 80) {
             this.hitoCalendarioActual = '🌧️ 3 May: Petición de Lluvias (Crecimiento)';
             this.codice.desbloquear('cal_santa_cruz');
-        } else if (dia < 140) {
+        } else if (dia < 130) {
             this.hitoCalendarioActual = '🎉 29 Sep: Fiesta de Xilocruz (Primeros Elotes)';
             this.codice.desbloquear('cal_xilocruz');
         } else {
@@ -181,7 +214,57 @@ export class MisionesSistema {
         if (this.onActualizarUI) this.onActualizarUI();
     }
 
+    public todasCompletadas(): boolean {
+        return this.misiones.every((m) => m.completada);
+    }
+
     public obtenerMisionActiva(): MisionMilpa {
-        return this.misiones.find((m) => !m.completada) || this.misiones[this.misiones.length - 1];
+        const pendiente = this.misiones.find((m) => !m.completada);
+        if (pendiente) return pendiente;
+        return {
+            id: 'mis_maestria_total',
+            categoria: 'Maestría',
+            titulo: '🌟 Maestro de la Milpa Viva',
+            descripcion: '¡Completaste todas las misiones! Explora las 4 razas, el Códice [K] y el Fogón [F].',
+            progreso: this.misiones.length,
+            meta: this.misiones.length,
+            completada: true
+        };
+    }
+
+    public exportarSnapshot(): MisionesSnapshot {
+        const progresoPorId: Record<string, { progreso: number; completada: boolean }> = {};
+        for (const m of this.misiones) {
+            progresoPorId[m.id] = { progreso: m.progreso, completada: m.completada };
+        }
+        return {
+            progresoPorId,
+            triadaCultivos: Array.from(this.triadaCultivos),
+            hitoCalendarioActual: this.hitoCalendarioActual
+        };
+    }
+
+    public restaurarSnapshot(snap?: MisionesSnapshot | null): void {
+        this.reiniciar(false);
+        if (!snap) {
+            if (this.onActualizarUI) this.onActualizarUI();
+            return;
+        }
+        if (snap.progresoPorId) {
+            for (const m of this.misiones) {
+                const saved = snap.progresoPorId[m.id];
+                if (saved) {
+                    m.progreso = Math.min(m.meta, saved.progreso ?? 0);
+                    m.completada = Boolean(saved.completada);
+                }
+            }
+        }
+        if (Array.isArray(snap.triadaCultivos)) {
+            snap.triadaCultivos.forEach((c) => this.triadaCultivos.add(c));
+        }
+        if (snap.hitoCalendarioActual) {
+            this.hitoCalendarioActual = snap.hitoCalendarioActual;
+        }
+        if (this.onActualizarUI) this.onActualizarUI();
     }
 }

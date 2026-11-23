@@ -52,6 +52,7 @@ export class ControladorXbox {
   public conectado = false;
   public indiceGamepad: number | null = null;
   public nombreGamepad = "Xbox Series S|X Controller";
+  public factorHaptico = 1.0;
 
   private prevButtons: boolean[] = new Array(18).fill(false);
   private timerAutoRepeatRT = 0;
@@ -196,6 +197,8 @@ export class ControladorXbox {
 
   /** Dispara vibración háptica Dual-Rumble en los motores del mando Xbox Series S. */
   public vibrar(fuerte = 0.35, suave = 0.5, duracionMs = 90): void {
+    const escala = Math.max(0, Math.min(1.5, this.factorHaptico));
+    if (escala <= 0.01) return;
     try {
       const gp = this.obtenerGamepadActivo() as any;
       const actuator = gp?.vibrationActuator || gp?.hapticActuators?.[0];
@@ -204,12 +207,12 @@ export class ControladorXbox {
           .playEffect("dual-rumble", {
             startDelay: 0,
             duration: duracionMs,
-            weakMagnitude: Math.max(0, Math.min(1, suave)),
-            strongMagnitude: Math.max(0, Math.min(1, fuerte)),
+            weakMagnitude: Math.max(0, Math.min(1, suave * escala)),
+            strongMagnitude: Math.max(0, Math.min(1, fuerte * escala)),
           })
           .catch?.(() => {});
       } else if (actuator && typeof actuator.pulse === "function") {
-        actuator.pulse(Math.max(fuerte, suave), duracionMs);
+        actuator.pulse(Math.min(1, Math.max(fuerte, suave) * escala), duracionMs);
       }
     } catch {
       // Silencioso en navegadores sin soporte de vibración
@@ -278,12 +281,10 @@ export class ControladorXbox {
     this.jugador.lookAnalogicoYaw = rx;
     this.jugador.lookAnalogicoPitch = ry;
 
-    // L3 (10): Sprint / Correr
+    // L3 (10): Sprint / Correr (toggle limpio sin forzar true cada frame)
     if (justPressed(10)) {
       this.jugador.corriendoGamepad = !this.jugador.corriendoGamepad;
       this.vibrar(0.15, 0.25, 55);
-    } else if (curr[10]) {
-      this.jugador.corriendoGamepad = true;
     }
 
     // R3 (11): Alternar vista 1ª Persona <-> Modo Orbital
@@ -424,28 +425,28 @@ export class ControladorXbox {
     this.timerNavMenu = Math.max(0, this.timerNavMenu - dt);
     this.timerSliderRepeat = Math.max(0, this.timerSliderRepeat - dt);
 
-    let pasoNav = 0;
-    if (justPressed(13) || justPressed(15) || (this.timerNavMenu <= 0 && (ly > 0.55 || lx > 0.55))) {
-      pasoNav = 1;
-    } else if (
-      justPressed(12) ||
-      justPressed(14) ||
-      (this.timerNavMenu <= 0 && (ly < -0.55 || lx < -0.55))
-    ) {
-      pasoNav = -1;
-    }
-
     const enfocadoActual = interactivos[this.modalFocusIdx];
     const esSlider =
       enfocadoActual instanceof HTMLInputElement && enfocadoActual.type === "range";
+    const esSelect = enfocadoActual instanceof HTMLSelectElement;
 
-    // Si el elemento enfocado es un slider, D-Pad Izq/Der (14/15), LB/RB (4/5) o Stick Derecho ajustan su valor
+    let pasoNav = 0;
+    if (justPressed(13) || (this.timerNavMenu <= 0 && ly > 0.55)) {
+      pasoNav = 1;
+    } else if (justPressed(12) || (this.timerNavMenu <= 0 && ly < -0.55)) {
+      pasoNav = -1;
+    } else if (!esSlider && !esSelect) {
+      if (justPressed(15) || (this.timerNavMenu <= 0 && lx > 0.55)) pasoNav = 1;
+      else if (justPressed(14) || (this.timerNavMenu <= 0 && lx < -0.55)) pasoNav = -1;
+    }
+
+    // Si el elemento enfocado es un slider, D-Pad Izq/Der (14/15), LB/RB (4/5), Stick Izq X o Stick Der X ajustan su valor
     if (esSlider) {
       let dirSlider = 0;
       if (justPressed(14) || justPressed(4)) dirSlider = -1;
       else if (justPressed(15) || justPressed(5)) dirSlider = 1;
-      else if (this.timerSliderRepeat <= 0 && (curr[14] || curr[4] || rx < -0.45)) dirSlider = -1;
-      else if (this.timerSliderRepeat <= 0 && (curr[15] || curr[5] || rx > 0.45)) dirSlider = 1;
+      else if (this.timerSliderRepeat <= 0 && (curr[14] || curr[4] || rx < -0.45 || lx < -0.55)) dirSlider = -1;
+      else if (this.timerSliderRepeat <= 0 && (curr[15] || curr[5] || rx > 0.45 || lx > 0.55)) dirSlider = 1;
 
       if (dirSlider !== 0) {
         const min = parseFloat(enfocadoActual.min || "0");
@@ -460,9 +461,19 @@ export class ControladorXbox {
         enfocadoActual.dispatchEvent(new Event("input", { bubbles: true }));
         enfocadoActual.dispatchEvent(new Event("change", { bubbles: true }));
         this.timerSliderRepeat = 0.09;
-        if (justPressed(14) || justPressed(15)) {
-          pasoNav = 0;
-        }
+        pasoNav = 0;
+      }
+    } else if (esSelect) {
+      let dirSelect = 0;
+      if (justPressed(14) || justPressed(4) || (this.timerNavMenu <= 0 && lx < -0.55)) dirSelect = -1;
+      else if (justPressed(15) || justPressed(5) || (this.timerNavMenu <= 0 && lx > 0.55)) dirSelect = 1;
+      if (dirSelect !== 0 && enfocadoActual.options.length > 0) {
+        enfocadoActual.selectedIndex =
+          (enfocadoActual.selectedIndex + dirSelect + enfocadoActual.options.length) %
+          enfocadoActual.options.length;
+        enfocadoActual.dispatchEvent(new Event("change", { bubbles: true }));
+        this.timerNavMenu = 0.22;
+        this.vibrar(0.08, 0.16, 30);
       }
     }
 
@@ -476,24 +487,34 @@ export class ControladorXbox {
     const elem = interactivos[this.modalFocusIdx];
     this.resaltarElementoModal(elem);
 
-    // Botón A (0) o RT (7): Activar elemento enfocado
+    // Botón A (0) o RT (7): Activar elemento enfocado (soporta [data-slot] con mousedown, <select>, checkbox y botones)
     if (justPressed(0) || justPressed(7)) {
-      elem.click();
+      if (elem.hasAttribute("data-slot")) {
+        elem.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true, cancelable: true }));
+        elem.click();
+      } else if (elem instanceof HTMLSelectElement && elem.options.length > 0) {
+        elem.selectedIndex = (elem.selectedIndex + 1) % elem.options.length;
+        elem.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        elem.click();
+      }
       this.vibrar(0.2, 0.35, 60);
     }
   }
 
   private obtenerElementosModalActivo(): HTMLElement[] {
     const contenedores = [
+      document.getElementById("modalAjustesVR"),
       document.getElementById("modalControlesBienvenida"),
+      document.getElementById("fichaCultivoModal"),
       document.getElementById("menuPausaMinecraft"),
       document.getElementById("menuPrincipalMinecraft"),
       document.getElementById("mc-cofre-overlay"),
+      document.getElementById("almacenMazorcasModal"),
       document.getElementById("dispensadorSemillasModal"),
       document.getElementById("fogonCocinaModal"),
       document.getElementById("bancoSemillasModal"),
       document.getElementById("codiceMaizModal"),
-      document.getElementById("modalAjustesVR"),
       document.querySelector(".panel-clima-card.visible") as HTMLElement | null,
       document.querySelector(".modal-celebracion.visible") as HTMLElement | null,
     ];
@@ -504,7 +525,7 @@ export class ControladorXbox {
       if (st.display === "none" || st.visibility === "hidden") continue;
       const nodos = Array.from(
         c.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input[type="range"]:not([disabled]), [data-slot]'
+          'button:not([disabled]), input[type="range"]:not([disabled]), input[type="checkbox"]:not([disabled]), select:not([disabled]), [data-slot]'
         )
       ).filter((el) => {
         const s = getComputedStyle(el);

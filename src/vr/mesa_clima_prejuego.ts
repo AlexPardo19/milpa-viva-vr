@@ -81,6 +81,11 @@ export class MesaClimaPrejuego {
     this.construirOrbePronostico();
     this.construirBotonEntrarCampo();
     this.construirRotulosIntuitivos();
+    // Sincronizar escala inicial del termómetro con climaInicial
+    const factorInicial = (this.clima.temperatura + 2) / 47.0;
+    if (this.termometroCilindro) {
+      this.termometroCilindro.scaling.y = Math.max(0.2, factorInicial * 1.5);
+    }
     registrarSolidoDesdeNodo(this.root, "mesaClima", 0.02);
   }
 
@@ -321,6 +326,7 @@ export class MesaClimaPrejuego {
           this.clima.lluvia = 4;
           this.clima.humedad = 65;
           this.clima.humedadSuelo = 32;
+          this.clima.viento = 2.5;
           this.palancaLluviaMesh.rotation.x = 0;
         } else if (this.clima.lluvia < 15) {
           // Cambiar a Tormenta
@@ -333,6 +339,7 @@ export class MesaClimaPrejuego {
           this.clima.lluvia = 0;
           this.clima.humedad = 22;
           this.clima.humedadSuelo = 10;
+          this.clima.viento = 2.5;
           this.palancaLluviaMesh.rotation.x = -0.45;
         }
         this.actualizarOrbe();
@@ -443,11 +450,15 @@ export class MesaClimaPrejuego {
     const boardMat = new StandardMaterial("matBoardOrbe", this.scene);
     boardMat.diffuseTexture = this.orbeTex;
     boardMat.emissiveColor = new Color3(0.6, 0.6, 0.6);
+    boardMat.specularColor = Color3.Black();
 
-    const board = MeshBuilder.CreatePlane("boardPronostico", { width: 0.60, height: 0.30 }, this.scene);
-    board.position.set(0, 1.55, 0.10);
-    board.material = boardMat;
-    board.parent = this.root;
+    for (const lado of [0, 1]) {
+      const board = MeshBuilder.CreatePlane(lado === 0 ? "boardPronostico" : "boardPronostico_back", { width: 0.60, height: 0.30 }, this.scene);
+      board.position.set(0, 1.55, 0.10 + (lado === 0 ? 0.008 : -0.008));
+      board.rotation.y = lado === 0 ? Math.PI : 0; // Lado 0 mira al jugador (+Z), lado 1 hacia el cobertizo
+      board.material = boardMat;
+      board.parent = this.root;
+    }
 
     this.actualizarOrbe();
   }
@@ -548,7 +559,8 @@ export class MesaClimaPrejuego {
       height: 0.16,
       depth: 0.28
     }, this.scene);
-    this.btnIniciarCampo.position.set(0, 0.98, -0.42);
+    // Colocado en el borde frontal (+Z) frente al jugador, lejos del murete trasero
+    this.btnIniciarCampo.position.set(0, 0.98, 0.36);
     this.btnIniciarCampo.material = matBtn;
     this.btnIniciarCampo.parent = this.root;
     this.btnIniciarCampo.renderOutline = true;
@@ -570,7 +582,7 @@ export class MesaClimaPrejuego {
     matPlaca.emissiveColor = new Color3(0.5, 0.5, 0.5);
 
     const placa = MeshBuilder.CreatePlane("placaBtnIniciar", { width: 0.90, height: 0.24 }, this.scene);
-    placa.position.set(0, 1.07, -0.42);
+    placa.position.set(0, 1.07, 0.36);
     placa.rotation.x = Math.PI / 2;
     placa.material = matPlaca;
     placa.parent = this.root;
@@ -622,6 +634,7 @@ export class MesaClimaPrejuego {
         this.clima.lluvia = 4;
         this.clima.humedad = 65;
         this.clima.humedadSuelo = 32;
+        this.clima.viento = 2.5;
         this.palancaLluviaMesh.rotation.x = 0;
         estadoLluvia = "🌧️ Lluvia de Temporal (4 mm/h)";
       } else if (this.clima.lluvia < 15) {
@@ -634,6 +647,7 @@ export class MesaClimaPrejuego {
         this.clima.lluvia = 0;
         this.clima.humedad = 22;
         this.clima.humedadSuelo = 10;
+        this.clima.viento = 2.5;
         this.palancaLluviaMesh.rotation.x = -0.45;
         estadoLluvia = "☀️ Sequía / Cielo Despejado (0 mm/h)";
       }
@@ -679,10 +693,10 @@ export class MesaClimaPrejuego {
     };
   }
 
-  public animar(tiempo: number): void {
-    // Giro suave de las aspas de la veleta según el viento
+  public animar(tiempo: number, dt = 0.016): void {
+    // Giro suave independiente de los FPS según la velocidad del viento
     if (this.veletaAspas) {
-      this.veletaAspas.rotation.y += this.clima.viento * 0.04;
+      this.veletaAspas.rotation.y += this.clima.viento * 2.4 * dt;
     }
     // Levitar el orbe holográfico
     if (this.orbeMesh) {

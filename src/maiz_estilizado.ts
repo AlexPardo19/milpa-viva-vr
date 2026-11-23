@@ -76,13 +76,18 @@ export class MaizEstilizado {
   // Estado dinámico
   private lastHeight = -1;
   private lastStage = "";
-  private lastDia = -1;
   private lastEstrésHidrico = -1;
   private lastSecado = -1;
   private lastMuerta = false;
   private lastCausaMuerte = "";
   private lastCuajado = 1.0;
+  private lastHuitlacoche = false;
   private contornoCerca = true;
+  private baseTasselRotX = 0;
+  private baseTasselRotZ = 0;
+  private windPhase = 0;
+  private lastWindTime = -1;
+  private lastSilkHex = "";
 
   constructor(
     scene: Scene,
@@ -135,14 +140,24 @@ export class MaizEstilizado {
   }
 
   private cast(mesh: Mesh): Mesh {
+    mesh.receiveShadows = true;
     if (this.shadowGen) {
       this.shadowGen.addShadowCaster(mesh);
     }
     return mesh;
   }
 
-  // Genera la textura procedural con degradados radiales realistas para las 16 hileras de granos y máscara de cuajado (M5)
-  private generarTexturaGranos(colorHex: string, cuajado = 1.0): DynamicTexture {
+  private limpiarShadowCaster(mesh: AbstractMesh | null | undefined): void {
+    if (!mesh || !this.shadowGen) return;
+    try {
+      this.shadowGen.removeShadowCaster(mesh, true);
+    } catch {
+      /* noop */
+    }
+  }
+
+  // Genera la textura procedural con degradados radiales realistas para hileras de granos, máscara de cuajado (M5) y huitlacoche (v4.1)
+  private generarTexturaGranos(colorHex: string, cuajado = 1.0, tieneHuitlacoche = false): DynamicTexture {
     if (this.kernelTex) {
       this.kernelTex.dispose();
     }
@@ -155,8 +170,8 @@ export class MaizEstilizado {
     ctx.fillStyle = cBase.scale(0.55).toHexString();
     ctx.fillRect(0, 0, W, Ht);
 
-    const cols = 16;
-    const rows = 22;
+    const cols = this.variedad === "chalqueno" ? 20 : this.variedad === "palomero" ? 22 : 16;
+    const rows = this.variedad === "palomero" ? 26 : 22;
     const cw = W / cols;
     const rh = Ht / rows;
 
@@ -177,6 +192,19 @@ export class MaizEstilizado {
           ctx.fillStyle = "#c9ba8e";
           ctx.beginPath();
           ctx.ellipse(x, y, cw * 0.30, rh * 0.30, 0, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+
+        if (tieneHuitlacoche && rnd > 0.72 && r > 2 && r < rows - 3) {
+          // Agalla globosa gris-plateada de Huitlacoche (Ustilago maydis)
+          const gH = ctx.createRadialGradient(x - cw * 0.15, y - rh * 0.15, 1, x, y, cw * 0.75);
+          gH.addColorStop(0, "#cbd5e1");
+          gH.addColorStop(0.5, "#64748b");
+          gH.addColorStop(1, "#1e293b");
+          ctx.fillStyle = gH;
+          ctx.beginPath();
+          ctx.ellipse(x, y, cw * 0.62, rh * 0.62, 0, 0, Math.PI * 2);
           ctx.fill();
           continue;
         }
@@ -270,10 +298,12 @@ export class MaizEstilizado {
     espigaAbierta = true,
     cuajado = 1.0,
     secado = 0.0,
-    causaMuerte?: Causa
+    causaMuerte?: Causa,
+    tieneHuitlacoche = false
   ): void {
-    // 1. Limpiar geometría anterior de forma recursiva para evitar cualquier nodo o malla huérfana flotante
+    // 1. Limpiar geometría anterior y remover shadow casters para evitar fugas
     if (this.stalkMesh) {
+      this.limpiarShadowCaster(this.stalkMesh);
       this.stalkMesh.dispose();
       this.stalkMesh = null;
     }
@@ -281,13 +311,20 @@ export class MaizEstilizado {
     this.nodeMeshes = [];
     this.braceRoots.forEach((r) => r.dispose());
     this.braceRoots = [];
-    this.leaves.forEach((l) => l.node.dispose());
+    this.leaves.forEach((l) => {
+      this.limpiarShadowCaster(l.mesh);
+      l.node.dispose();
+    });
     this.leaves = [];
     this.leafCollars.forEach((c) => c.dispose());
     this.leafCollars = [];
-    this.ears.forEach((e) => e.dispose());
+    this.ears.forEach((e) => {
+      e.getChildMeshes(false).forEach((m) => this.limpiarShadowCaster(m));
+      e.dispose();
+    });
     this.ears = [];
     if (this.tasselNode) {
+      this.tasselNode.getChildMeshes(false).forEach((m) => this.limpiarShadowCaster(m));
       this.tasselNode.dispose();
       this.tasselNode = null;
     }
@@ -575,7 +612,13 @@ export class MaizEstilizado {
         },
         this.scene
       );
-      rib.material = esHojaSeca ? this.dryLeafMats[0] : this.ribMat;
+      rib.material = esMuerteHelada
+        ? this.frostMat
+        : esMuerteEnch && k < 2
+        ? this.rotMat
+        : esHojaSeca
+        ? this.dryLeafMats[0]
+        : this.ribMat;
       rib.parent = swayNode;
 
       this.leaves.push({
@@ -591,7 +634,22 @@ export class MaizEstilizado {
 
     // --- E. ELOTES / MAZORCAS CON TOTOMOXTO Y ESTIGMAS ---
     if (mostrarElotes && H >= 3.4) {
-      this.cobMat.diffuseTexture = this.generarTexturaGranos(granoHex, cuajado);
+      this.cobMat.diffuseTexture = this.generarTexturaGranos(granoHex, cuajado, tieneHuitlacoche);
+      if (estigmaHex && estigmaHex !== this.lastSilkHex) {
+        this.lastSilkHex = estigmaHex;
+        const cSilk = Color3.FromHexString(estigmaHex);
+        const spreads = [0.92, 1.04, 0.84, 1.12];
+        this.silkMatsFresco.forEach((m, idx) => {
+          const c = cSilk.scale(spreads[idx % spreads.length]);
+          m.diffuseColor = c;
+          m.emissiveColor = c.scale(0.02);
+        });
+        this.silkMatsSeco.forEach((m, idx) => {
+          const c = cSilk.scale(spreads[idx % spreads.length] * 0.78);
+          m.diffuseColor = c;
+          m.emissiveColor = c.scale(0.02);
+        });
+      }
 
       const makeEar = (
         tEar: number,
@@ -704,7 +762,7 @@ export class MaizEstilizado {
         this.ears.push(earNode);
       };
 
-      const peelEfectivo = secado > 0.75 || esMuerteAgotamiento ? 6 : Math.max(1, peelCount);
+      const peelEfectivo = secado > 0.75 || esMuerteAgotamiento ? 5 : Math.max(0, peelCount);
       const factorEscalaVar =
         this.variedad === "chalqueno"
           ? 1.08
@@ -742,6 +800,8 @@ export class MaizEstilizado {
       const oriTassel = orientacionTallo(0.98);
       tassel.rotation.z = oriTassel.rotZ;
       tassel.rotation.x = oriTassel.rotX;
+      this.baseTasselRotZ = oriTassel.rotZ;
+      this.baseTasselRotX = oriTassel.rotX;
 
       const inclinacionEspigaSeca = secado * 0.25 + (causaMuerte ? 0.35 : 0);
       const spike = MeshBuilder.CreateTube(
@@ -838,11 +898,10 @@ export class MaizEstilizado {
       this.huskMat.emissiveColor = ch.scale(0.02);
     }
     if (this.cobMat) {
-      this.cobMat.diffuseTexture = this.generarTexturaGranos(varCfg.colorHex, this.lastCuajado);
+      this.cobMat.diffuseTexture = this.generarTexturaGranos(varCfg.colorHex, this.lastCuajado, this.lastHuitlacoche);
       const cg = Color3.FromHexString(varCfg.colorHex);
       this.cobMat.emissiveColor = cg.scale(0.02);
     }
-    this.lastDia = -1;
     this.lastStage = "";
     this.lastHeight = -1;
   }
@@ -851,7 +910,6 @@ export class MaizEstilizado {
    * Actualiza los colores y morfología según la etapa fenológica, límite de crecimiento, secado y causa de muerte
    */
   public sincronizarConEstado(estado: EstadoCrecimiento, _clima: ClimateState, metricas: Metricas): void {
-    const diaEntero = Math.floor(estado.dia);
     const etapa = estado.etapa;
     const p = estado.plantaInterna;
     if (p.variedad && p.variedad !== this.variedad) {
@@ -908,21 +966,21 @@ export class MaizEstilizado {
       tieneEspiga = true;
       tieneElotes = true;
       eloteTamano = 0.35;
-      peel = 1;
+      peel = 0;
     } else if (etapa.includes("VT")) {
       altBase = 6.6;
       numHojas = 8;
       tieneEspiga = true;
       tieneElotes = true;
       eloteTamano = 0.50;
-      peel = 1;
+      peel = 0;
       estigmaCol = "#e8c46a";
     } else if (etapa.includes("R1")) {
       altBase = 6.6;
       tieneEspiga = true;
       tieneElotes = true;
       eloteTamano = 0.65;
-      peel = 2;
+      peel = 0;
       granoCol = "#fff09a";
       estigmaCol = "#e8c46a";
     } else if (etapa.includes("R2")) {
@@ -930,7 +988,7 @@ export class MaizEstilizado {
       tieneEspiga = true;
       tieneElotes = true;
       eloteTamano = 0.85;
-      peel = 2;
+      peel = 1;
       granoCol = "#fff09a";
       estigmaCol = "#c8873a";
     } else if (etapa.includes("R3") || etapa.includes("R4")) {
@@ -938,7 +996,7 @@ export class MaizEstilizado {
       tieneEspiga = true;
       tieneElotes = true;
       eloteTamano = 1.0;
-      peel = 4;
+      peel = 3;
       granoCol = varCfg.colorHex;
       estigmaCol = "#c8873a";
     } else if (etapa.includes("R5")) {
@@ -946,7 +1004,7 @@ export class MaizEstilizado {
       tieneEspiga = true;
       tieneElotes = true;
       eloteTamano = 1.0;
-      peel = 5;
+      peel = 4;
       granoCol = varCfg.colorHex;
       estigmaCol = "#9a5d28";
     } else if (etapa.includes("R6") || p.estado === "MADURA") {
@@ -973,6 +1031,7 @@ export class MaizEstilizado {
 
     const secado = Math.max(p.secado ?? 0, estado.amarillamiento * 0.75);
     const causaMuerte = estado.estaMuerta ? (p.causaMuerte ?? "sequia") : undefined;
+    const tieneHuitlacoche = (p.huitlacoche ?? 0) >= 0.45;
 
     if (estado.estaMuerta) {
       if (causaMuerte === "agotamiento") {
@@ -997,7 +1056,7 @@ export class MaizEstilizado {
       this.lastMuerta !== estado.estaMuerta ||
       this.lastCausaMuerte !== causaStr ||
       Math.abs(this.lastCuajado - cuajadoActual) > 0.08 ||
-      this.lastDia !== diaEntero
+      this.lastHuitlacoche !== tieneHuitlacoche
     ) {
       this.construir(
         alt,
@@ -1012,16 +1071,17 @@ export class MaizEstilizado {
         etapa.includes("VT") || etapa.includes("R"),
         cuajadoActual,
         secado,
-        causaMuerte
+        causaMuerte,
+        tieneHuitlacoche
       );
       this.lastHeight = alt;
       this.lastStage = etapa;
-      this.lastDia = diaEntero;
       this.lastEstrésHidrico = marchitas;
       this.lastSecado = secado;
       this.lastMuerta = estado.estaMuerta;
       this.lastCausaMuerte = causaStr;
       this.lastCuajado = cuajadoActual;
+      this.lastHuitlacoche = tieneHuitlacoche;
     }
 
     // Actualizar colores dinámicos según el estado vital, secado y causa de muerte
@@ -1116,51 +1176,77 @@ export class MaizEstilizado {
     this.braceRootMat.diffuseColor = colRaiz;
     this.braceRootMat.emissiveColor = colRaiz.scale(0.02);
 
-    this.greenMats.forEach((m) => {
-      m.diffuseColor = colHoja;
-      m.emissiveColor = colHoja.scale(0.02);
-    });
+    // Nervadura central coherente con la salud foliar
+    const colRib = Color3.Lerp(colHoja, colTallo, 0.45).scale(1.12);
+    this.ribMat.diffuseColor = colRib;
+    this.ribMat.emissiveColor = colRib.scale(0.02);
 
-    // Actualizar matiz de hojas secas según la causa de muerte o senescencia
-    const colHojaSecaBase =
-      estado.estaMuerta && (causa === "sequia" || causa === "calor")
-        ? Color3.FromHexString("#784b1a")
-        : Color3.FromHexString("#b8953d");
-    this.dryLeafMats.forEach((m, idx) => {
-      const c = colHojaSecaBase.scale(1.0 - idx * 0.1);
+    // Conservar variación tonal natural entre hojas vivas (3 matices)
+    const variaciones = [0.94, 0.86, 1.05];
+    this.greenMats.forEach((m, idx) => {
+      const c = colHoja.scale(variaciones[idx % variaciones.length]);
       m.diffuseColor = c;
       m.emissiveColor = c.scale(0.02);
     });
+
+    // Actualizar frostMat, rotMat y dryLeafMats con colores reales de degradación post-mortem
+    if (estado.estaMuerta) {
+      const deg = estado.degradacion;
+      if (causa === "helada") {
+        this.frostMat.diffuseColor = colHoja;
+        this.frostMat.emissiveColor = colHoja.scale(0.02);
+      } else if (causa === "encharcamiento" || causa === "pudricion_semilla") {
+        const cRot = Color3.Lerp(Color3.FromHexString("#332312"), Color3.FromHexString("#160e06"), deg);
+        this.rotMat.diffuseColor = cRot;
+        this.rotMat.emissiveColor = cRot.scale(0.02);
+      }
+      this.dryLeafMats.forEach((m, idx) => {
+        const c = colHoja.scale(1.0 - idx * 0.1);
+        m.diffuseColor = c;
+        m.emissiveColor = c.scale(0.02);
+      });
+    } else {
+      const colHojaSecaBase = Color3.FromHexString("#b8953d");
+      this.dryLeafMats.forEach((m, idx) => {
+        const c = colHojaSecaBase.scale(1.0 - idx * 0.1);
+        m.diffuseColor = c;
+        m.emissiveColor = c.scale(0.02);
+      });
+    }
   }
 
   /**
-   * Bucle de oscilación biomecánica por viento y acame permanente
+   * Bucle de oscilación biomecánica por viento y acame permanente (con fase integrada sin saltos)
    */
   public animarViento(timeSeg: number, vientoMs: number, acameGrados: number, estaMuerta: boolean): void {
     const w = vientoMs / 5.0; // Normalizado
+    const dt = this.lastWindTime < 0 ? 0.016 : Math.min(0.08, Math.max(0, timeSeg - this.lastWindTime));
+    this.lastWindTime = timeSeg;
+    this.windPhase += dt * (1.8 + w * 0.35);
+
     const radAcame = (acameGrados * Math.PI) / 180;
 
     // Oscilación de tallo
     if (estaMuerta) {
-      this.plantNode.rotation.z = -radAcame - 0.25 + Math.sin(timeSeg * 1.5) * 0.005 * w;
-      this.plantNode.rotation.x = Math.cos(timeSeg * 1.2) * 0.003 * w;
+      this.plantNode.rotation.z = -radAcame - 0.25 + Math.sin(this.windPhase * 0.85) * 0.005 * w;
+      this.plantNode.rotation.x = Math.cos(this.windPhase * 0.7) * 0.003 * w;
     } else {
-      const oscZ = Math.sin(timeSeg * (1.8 + w * 0.2)) * 0.015 * w;
-      const oscX = Math.cos(timeSeg * 1.3) * 0.01 * w;
+      const oscZ = Math.sin(this.windPhase) * 0.015 * w;
+      const oscX = Math.cos(this.windPhase * 0.72) * 0.01 * w;
       this.plantNode.rotation.z = -radAcame + oscZ;
       this.plantNode.rotation.x = oscX;
     }
 
     // Aleteo y oscilación independiente de cada hoja
     this.leaves.forEach((l) => {
-      l.node.rotation.z = Math.sin(timeSeg * 1.3 + l.ph) * l.amp * w;
-      l.node.rotation.x = Math.cos(timeSeg * 0.9 + l.ph) * 0.03 * w;
+      l.node.rotation.z = Math.sin(this.windPhase * 0.75 + l.ph) * l.amp * w;
+      l.node.rotation.x = Math.cos(this.windPhase * 0.55 + l.ph) * 0.03 * w;
     });
 
-    // Ondulación de la espiga apical
+    // Ondulación de la espiga apical preservando su orientación tangencial base
     if (this.tasselNode) {
-      this.tasselNode.rotation.z = Math.sin(timeSeg * 1.1) * 0.06 * w;
-      this.tasselNode.rotation.x = Math.cos(timeSeg * 0.9) * 0.05 * w;
+      this.tasselNode.rotation.z = this.baseTasselRotZ + Math.sin(this.windPhase * 0.65) * 0.06 * w;
+      this.tasselNode.rotation.x = this.baseTasselRotX + Math.cos(this.windPhase * 0.52) * 0.05 * w;
     }
   }
 

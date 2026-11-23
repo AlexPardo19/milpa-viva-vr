@@ -170,35 +170,37 @@ export class ModalControlesBienvenida {
                     <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.16);border-radius:0;padding:12px;">
                         <div style="color:#fcd34d;font-weight:800;font-size:0.88rem;margin-bottom:6px;">🚶 Movimiento y Cámara (Estilo Minecraft)</div>
                         <ul style="margin:0;padding-left:18px;color:#e2e8f0;font-size:0.8rem;line-height:1.55;">
-                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">W</kbd> <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">A</kbd> <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">S</kbd> <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">D</kbd> o Flechas: Caminar por la milpa.</li>
-                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">Espacio</kbd>: Saltar · <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">Shift</kbd>: Correr.</li>
+                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">W</kbd> <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">A</kbd> <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">S</kbd> <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">D</kbd>: Caminar · <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">◀</kbd> <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">▶</kbd>: Girar cámara.</li>
+                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">Espacio</kbd>: Saltar · <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">Shift</kbd>: Correr · <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">V</kbd>: 1ª Persona / Orbital.</li>
                             <li><b>Clic en la escena 3D</b>: Capturar ratón para mirar en 1ª persona.</li>
-                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">ESC</kbd>: Liberar el cursor o cerrar ventanas.</li>
+                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">ESC</kbd>: Liberar el cursor, cerrar ventanas o pausar.</li>
                         </ul>
                     </div>
                     <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.16);border-radius:0;padding:12px;">
                         <div style="color:#34d399;font-weight:800;font-size:0.88rem;margin-bottom:6px;">🛠️ Herramientas y Acciones en Parcela</div>
                         <ul style="margin:0;padding-left:18px;color:#e2e8f0;font-size:0.8rem;line-height:1.55;">
                             <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">1</kbd>–<kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">9</kbd> o <b>Rueda del Ratón</b>: [1] Manos, [2] Azada, [3-6] 4 Semillas de Maíz, [7] Agua, [8] Abono, [9] Cosecha.</li>
-                            <li><b>Clic Izquierdo / Derecho</b> o <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">E</kbd>: Usar ítem sobre la estación apuntada.</li>
-                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">Q</kbd> o botón <b>🗑️ Quitar</b>: Arrancar/limpiar planta.</li>
-                            <li><b>Semillas y Troje</b>: Repón semillas con <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">U</kbd> (Dispensador) y abre Mochila/Troje con <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">I</kbd>.</li>
+                            <li><b>Clic Izquierdo / Derecho</b> o <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">E</kbd>: Usar ítem o interactuar con estaciones 3D.</li>
+                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">J</kbd>: Crecimiento continuo · <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">Y</kbd>: Sol +15d (con autopausa ante alertas).</li>
+                            <li><kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">L</kbd>: Ficha Clínica y Raíces · <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">Q</kbd>: Quitar planta · <kbd style="background:#1e293b;padding:1px 6px;border-radius:0;border:1px solid #475569;">I</kbd>: Troje.</li>
                         </ul>
                     </div>
                 </div>
                 <div style="background:rgba(16,185,129,0.12);border:2px solid rgba(52,211,153,0.4);border-radius:0;padding:10px 12px;font-size:0.79rem;color:#d1fae5;line-height:1.5;">
                     <b>⌨️ Atajos Rápidos de Menús y Labores:</b>
                     <span style="display:inline-block;margin-left:6px;">✋ Manos <kbd>[1]</kbd></span> ·
-                    <span>🌰 Dispensador <kbd>[U]</kbd></span> ·
+                    <span>🔍 Ficha Clínica <kbd>[L]</kbd></span> ·
+                    <span>▶ Crecer <kbd>[J]</kbd></span> ·
                     <span>☀️ Sol +15d <kbd>[Y]</kbd></span> ·
-                    <span>⏸️ Pausa/Guardar <kbd>[Esc]</kbd></span> ·
+                    <span>🌰 Dispensador <kbd>[U]</kbd></span> ·
                     <span>🧬 Banco <kbd>[M]</kbd></span> ·
                     <span>🏛️ Troje <kbd>[I]</kbd></span> ·
                     <span>🔥 Fogón <kbd>[F]</kbd></span> ·
                     <span>📖 Códice <kbd>[K]</kbd></span> ·
                     <span>⛅ Clima <kbd>[C]</kbd></span> ·
                     <span>🔬 Lab 3D <kbd>[H]</kbd></span> ·
-                    <span>🗑️ Quitar Planta <kbd>[Q]</kbd></span> ·
+                    <span>⚙️ Ajustes <kbd>[O]</kbd></span> ·
+                    <span>🗑️ Quitar <kbd>[Q]</kbd></span> ·
                     <span>🌿 Deshierbar <kbd>[X]</kbd></span> ·
                     <span>🌬️ Polinizar <kbd>[P]</kbd></span> ·
                     <span>🫘 +Frijol <kbd>[B]</kbd></span> ·
@@ -277,9 +279,10 @@ export class ModalControlesBienvenida {
                         <div style="background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.14);border-left:5px solid ${v.colorHex};border-radius:0;padding:9px 11px;font-size:0.78rem;line-height:1.38;">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
                                 <strong style="color:#fcd34d;font-size:0.85rem;">🌽 ${v.nombre}</strong>
-                                <span style="background:rgba(255,255,255,0.12);padding:1px 7px;border-radius:0;font-size:0.71rem;color:#cbd5e1;">Límite: ${v.alturaMetrosMax.toFixed(1)} m</span>
+                                <span style="background:rgba(255,255,255,0.12);padding:1px 7px;border-radius:0;font-size:0.71rem;color:#cbd5e1;">${v.alturaMetrosMax.toFixed(1)} m · ${v.hilerasMazorca} hil.</span>
                             </div>
-                            <div style="color:#93c5fd;font-size:0.74rem;margin-bottom:4px;"><em>${v.especieBotanica}</em> · ${v.origenBiogeografico}</div>
+                            <div style="color:#93c5fd;font-size:0.73rem;margin-bottom:3px;"><em>${v.especieBotanica}</em> · ${v.origenBiogeografico}</div>
+                            <div style="color:#fde68a;font-size:0.72rem;margin-bottom:4px;">🔬 ${v.tipoEndospermo} · Elote R3 ~${v.diasEloteR3Est}d / Grano R6 ~${v.diasMadurezR6Est}d · ${v.rendimientoPotencialTonHa}</div>
                             <div style="color:#a7f3d0;margin-bottom:2px;">✅ <b>Crece favorablemente en:</b> ${v.condicionesFavorables}</div>
                             <div style="color:#fca5a5;">⚠️ <b>Le perjudica:</b> ${v.queLePerjudica}</div>
                         </div>

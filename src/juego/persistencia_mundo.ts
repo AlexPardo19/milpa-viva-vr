@@ -1,6 +1,9 @@
 import { ClimateState, CLIMA_INICIAL } from "../clima";
 import { ItemStack } from "../inventario/inventario";
 import { CultivoAsociado, Planta, TipoSemilla } from "../nucleo";
+import type { MisionesSnapshot } from "./misiones";
+import type { DirectorEventosSnapshot } from "./director_eventos";
+import type { LoteSemilla } from "./banco_semillas";
 
 export type PresetClimaMundo = "templado" | "temporal" | "sequia" | "helada";
 export type DificultadMundo = "tranquilo" | "normal" | "extremo";
@@ -13,6 +16,9 @@ export interface NodoGuardado {
   sembrada: boolean;
   humedadVWC: number;
   nutrientesNPK: number;
+  nSuelo?: number;
+  pSuelo?: number;
+  kSuelo?: number;
   gddAcumulados: number;
   frame60: number;
   cosechada: boolean;
@@ -25,6 +31,8 @@ export interface NodoGuardado {
   calidad: number;
   frijolVid: number;
   calabazaCobertura: number;
+  frijolCosechado?: boolean;
+  calabazaCosechada?: boolean;
   plantaInterna: Planta;
 }
 
@@ -37,10 +45,20 @@ export interface PartidaGuardada {
   actualizadoEn: number;
   diaMaximo: number;
   clima: ClimateState;
+  cicloSolarAuto?: boolean;
   nodos: NodoGuardado[];
   slotsJugador: (ItemStack | null)[];
   slotsTroje: (ItemStack | null)[];
   almacenPorVariedad: Record<TipoSemilla, number>;
+  // Persistencia completa v4.1 por mundo
+  misiones?: MisionesSnapshot;
+  fogonPlatos?: string[];
+  canastaIngredientes?: { quelites: number; frijol: number; calabaza: number; huitlacoche?: number };
+  directorEventos?: DirectorEventosSnapshot;
+  codiceIds?: string[];
+  bancoLotes?: LoteSemilla[];
+  bancoLoteActivo?: number;
+  logroPrimeraCosecha?: boolean;
 }
 
 const STORAGE_KEY_WORLDS = "milpaviva.mundos.v1";
@@ -95,13 +113,14 @@ export function listarPartidas(): PartidaGuardada[] {
   }
 }
 
-export function guardarPartida(partida: PartidaGuardada): void {
+export function guardarPartida(partida: PartidaGuardada): boolean {
   try {
     const actuales = listarPartidas().filter((p) => p.id !== partida.id);
     actuales.unshift(partida);
     localStorage.setItem(STORAGE_KEY_WORLDS, JSON.stringify(actuales.slice(0, 12)));
+    return true;
   } catch {
-    // Almacenamiento bloqueado o lleno en contexto sandbox
+    return false;
   }
 }
 

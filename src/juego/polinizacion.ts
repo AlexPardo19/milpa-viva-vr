@@ -4,6 +4,7 @@ import { ParticulasEducativas } from '../educativo/particulas_educativas';
 import { AudioSintetizador } from '../audio_sintetizador';
 import { BusEventos } from './bus_eventos';
 import { clamp01 } from './util';
+import { CFG, Etapa, etapaDe, VARIEDADES_MAIZ } from '../nucleo';
 
 /**
  * M5: Sistema de Polinización Manual y por Viento
@@ -51,18 +52,27 @@ export class PolinizacionSistema {
             return { exito: false, mensaje: msg };
         }
 
+        const varCfg = VARIEDADES_MAIZ[nodo.variedad];
+        const etapaActual =
+            nodo.plantaInterna.estado === 'SEMILLA'
+                ? Etapa.SEMILLA
+                : etapaDe(nodo.plantaInterna.gdd, CFG, varCfg);
         const dia = Math.floor(nodo.diasCultivo);
-        if (dia < 45) {
+        if (etapaActual < Etapa.VT && dia < 45) {
             const msg = `🌼 Estación #${nodoId + 1}: La planta aún es joven (Día ${dia}). La espiga suelta polen a partir de VT/R1.`;
             if (this.onMensajeToast) this.onMensajeToast(msg);
             return { exito: false, mensaje: msg };
         }
+        if (etapaActual > Etapa.R3) {
+            const msg = `🌽 Estación #${nodoId + 1}: La floración ya cerró (${nodo.estadoCrec.etapa.split(' ')[0]}). La mazorca está llenando/secando granos.`;
+            if (this.onMensajeToast) this.onMensajeToast(msg);
+            return { exito: false, mensaje: msg };
+        }
 
-        nodo.polinizacion = clamp01(nodo.polinizacion + 0.28);
-        nodo.plantaInterna.cuajado = Math.max(
-            nodo.plantaInterna.cuajado,
-            clamp01(0.45 + 0.55 * nodo.polinizacion)
-        );
+        nodo.polinizacion = clamp01(nodo.polinizacion + 0.30);
+        nodo.plantaInterna.cuajado = clamp01(Math.max(nodo.plantaInterna.cuajado, 0.38 + 0.62 * nodo.polinizacion));
+        nodo.plantaInterna.aborto = clamp01(1.0 - nodo.plantaInterna.cuajado);
+        this.surco.actualizarLetrero(nodoId);
 
         // Emitir nube de polen dorado desde la altura real de la espiga hacia los jilotes
         const altEspiga = Math.max(0.85, Math.min(1.65, nodo.plantaInterna.alturaMetros * 0.72));

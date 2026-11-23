@@ -63,19 +63,21 @@ La aplicación incorpora un motor de audio por síntesis matemática en tiempo r
 
 | Control | Acción |
 | :--- | :--- |
-| **`W, A, S, D`** | Moverse por el huerto en primera persona |
-| **`Shift`** | Correr |
-| **`Ratón / Clic lienzo`** | Mirar alrededor (bloquea el cursor) / `Esc` para liberar |
-| **`Q` / `E`** | Girar vista a la izquierda / derecha con el teclado |
-| **`Clic Izquierdo` / `Espacio`** | **Usar herramienta física** sobre el suelo o hablar con Don Elote |
-| **`E`** | **Hablar con Don Elote** y escuchar datos fascinantes |
-| **`V`** | **Alternar entre Primera Persona (Juego) y Modo Orbital** |
-| **`1`** a **`6`** | Equipar herramienta en mano: Azada (`1`), Semilla (`2`), Regadera (`3`), Abono (`4`), Sol +15D (`5`), Cosechar (`6`) |
-| **`Tab`** | Teletransportarse a la siguiente estación del surco (1 a 6) |
-| **`L`** | Regresar al Cobertizo con la mesa de clima 3D |
-| **`Enter`** | Salir del cobertizo e ingresar al campo de cultivo |
-| **`C`** | Abrir / Cerrar Panel Flotante de Condiciones Climatológicas |
-| **`H`** | Mostrar / Ocultar Consolas Científicas 3D |
+| **`W, A, S, D`** | Moverse por la parcela en primera persona |
+| **`◀` / `▶` (Flechas)** | Girar la cámara a la izquierda / derecha con el teclado |
+| **`Espacio` / `Shift`** | Saltar / Correr |
+| **`Ratón / Clic lienzo`** | Mirar alrededor (bloquea el cursor) / `Esc` para liberar o pausar |
+| **`1`–`9` / Rueda** | Hotbar: `[1]` Manos, `[2]` Azada, `[3-6]` 4 Razas de Maíz, `[7]` Regadera, `[8]` Abono, `[9]` Cosecha |
+| **`Clic Izq` / `Clic Der`** | Usar herramienta equipada / Acción contextual rápida |
+| **`E`** | Interactuar con estación apuntada (Troje, Fogón, Banco, Dispensador, Mesa Clima, Don Elote) |
+| **`Q`** | Quitar / arrancar planta o limpiar rastrojo |
+| **`J` / `Y`** | Crecimiento continuo (Play/Pausa) / Avanzar +15 días con autopausa inteligente |
+| **`L`** | Abrir **Ficha Clínica del Cultivo y Perfil Radicular 2D** |
+| **`X` / `P` / `B` / `N`** | Deshierbar (`X`), Polinizar (`P`), Asociar Frijol Ayocote (`B`), Asociar Calabaza (`N`) |
+| **`T` / `G`** | Colocar Tutor antiviento (`T`) / Petate antihelada (`G`) |
+| **`I` / `U` / `M` / `F` / `K`** | Troje/Mochila (`I`), Dispensador (`U`), Banco de Semillas (`M`), Fogón (`F`), Códice (`K`) |
+| **`C` / `H` / `O` / `?`** | Panel Clima (`C`), Lab 3D (`H`), Ajustes VR/Accesibilidad (`O`), Guía de Controles (`?`) |
+| **`V` / `Tab` / `Z`** | Vista 1ª Persona ↔ Orbital (`V`), Siguiente estación (`Tab`), Ir al Cobertizo (`Z`) |
 
 ---
 

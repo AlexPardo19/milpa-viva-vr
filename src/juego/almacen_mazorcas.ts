@@ -79,6 +79,7 @@ export class AlmacenMazorcas {
 
   public onMensajeToast?: (msg: string) => void;
   public onCambioInventario?: () => void;
+  public onAbrirCofre?: () => void;
 
   constructor(
     scene: Scene,
@@ -298,11 +299,23 @@ export class AlmacenMazorcas {
    * si no trae mazorcas en la mano, abre el modal de gestión del Almacén.
    */
   public interactuarConTroje(): void {
+    if (this.onAbrirCofre) {
+      this.onAbrirCofre();
+      return;
+    }
     if (this.canasta.totalCosechados > 0) {
       this.almacenarTodasDeMano();
     } else {
       this.alternarModal();
     }
+  }
+
+  public reiniciarAlmacen(): void {
+    this.almacenadoPorVariedad = { chalqueno: 0, azul: 0, rojo: 0, palomero: 0 };
+    this.calidadesAlmacenadas = [];
+    this.guardarAlmacen();
+    this.actualizarVisualesTroje();
+    this.actualizarModalUI();
   }
 
   /**
@@ -694,6 +707,14 @@ export class AlmacenMazorcas {
       .map((t) => {
         const enMano = this.canasta.conteoPorVariedad[t.id] || 0;
         const enTroje = this.almacenadoPorVariedad[t.id] || 0;
+        const stGuardar =
+          enMano <= 0
+            ? "opacity:0.4;padding:6px 12px;border:2px solid #555;background:#8b8b8b;color:#fff;border-radius:0;cursor:not-allowed;"
+            : "padding:6px 12px;border:2px solid;border-color:#fff #333 #333 #fff;background:#16a34a;color:#fff;font-weight:700;cursor:pointer;font-size:0.8rem;border-radius:0;";
+        const stSacar =
+          enTroje <= 0
+            ? "opacity:0.4;padding:6px 12px;border:2px solid #555;background:#8b8b8b;color:#fff;border-radius:0;cursor:not-allowed;"
+            : "padding:6px 12px;border:2px solid;border-color:#fff #333 #333 #fff;background:#d97706;color:#fff;font-weight:700;cursor:pointer;font-size:0.8rem;border-radius:0;";
         return `
           <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.12);padding:8px 12px;border:2px solid #555;margin-bottom:6px;border-left:6px solid ${t.col};">
             <div>
@@ -701,10 +722,10 @@ export class AlmacenMazorcas {
               <div style="font-size:0.82rem;color:#555;">En Mano: <b>${enMano}</b> · En Troje: <b>${enTroje}</b></div>
             </div>
             <div style="display:flex;gap:6px;">
-              <button data-guardar="${t.id}" style="padding:6px 12px;border:2px solid;border-color:#fff #333 #333 #fff;background:#16a34a;color:#fff;font-weight:700;cursor:pointer;font-size:0.8rem;border-radius:0;" ${enMano <= 0 ? "disabled style='opacity:0.4;padding:6px 12px;border:2px solid #555;background:#8b8b8b;color:#fff;border-radius:0;'" : ""}>
+              <button data-guardar="${t.id}" style="${stGuardar}" ${enMano <= 0 ? "disabled" : ""}>
                 📥 Guardar
               </button>
-              <button data-sacar="${t.id}" style="padding:6px 12px;border:2px solid;border-color:#fff #333 #333 #fff;background:#d97706;color:#fff;font-weight:700;cursor:pointer;font-size:0.8rem;border-radius:0;" ${enTroje <= 0 ? "disabled style='opacity:0.4;padding:6px 12px;border:2px solid #555;background:#8b8b8b;color:#fff;border-radius:0;'" : ""}>
+              <button data-sacar="${t.id}" style="${stSacar}" ${enTroje <= 0 ? "disabled" : ""}>
                 📤 Sacar
               </button>
             </div>

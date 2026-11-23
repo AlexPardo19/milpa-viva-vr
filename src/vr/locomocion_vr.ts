@@ -33,6 +33,7 @@ export class LocomocionVR {
 
   public nodoActualIndex = 0;
   public enLobby = true;
+  public modoFPSActivo = true;
   public onTeletransportar?: (posicion: Vector3, mirarA: Vector3) => void;
 
   constructor(
@@ -56,6 +57,14 @@ export class LocomocionVR {
     }
   }
 
+  private estaEnXR(): boolean {
+    return Boolean(
+      this.xr &&
+      this.xr.baseExperience &&
+      this.xr.baseExperience.state === WebXRState.IN_XR
+    );
+  }
+
   /**
    * H1 & H6: Configura el feature nativo de Teletransporte WebXR con puntos de anclaje y Snap Turn (30°)
    */
@@ -68,20 +77,24 @@ export class LocomocionVR {
       );
       // Puntos adicionales: Lobby (Cobertizo), Fogón de Cocina y Banco de Semillas
       snapPoints.push(new Vector3(0, 0, -2.5));
-      snapPoints.push(new Vector3(2.8, 0, -2.4));
-      snapPoints.push(new Vector3(-2.2, 0, -2.6));
+      snapPoints.push(new Vector3(3.05, 0, -2.2));
+      snapPoints.push(new Vector3(-3.1, 0, -2.2));
 
       const pisos: Mesh[] = this.surco.nodos.map((n) => n.marcadorTeleport);
-      const sueloBase = this.scene.getMeshByName("ground") as Mesh | null;
+      const sueloBase = (
+        this.scene.getMeshByName("grassGround") ||
+        this.scene.getMeshByName("ground")
+      ) as Mesh | null;
       if (sueloBase) pisos.push(sueloBase);
 
+      const usarGiroDiscreto = this.ajustes?.valores.giro !== "suave";
       fm.enableFeature(WebXRFeatureName.TELEPORTATION, "stable", {
         xrInput: xr.input,
         floorMeshes: pisos,
         snapPositions: snapPoints,
         snapToPositionRadius: 0.75,
         parabolicRayEnabled: true,
-        rotationEnabled: true,
+        rotationEnabled: usarGiroDiscreto,
         rotationAngle: Math.PI / 6, // 30° snap turn confortable
         timeToTeleport: 120
       });
@@ -101,6 +114,7 @@ export class LocomocionVR {
         new ExecuteCodeAction(
           ActionManager.OnPickTrigger,
           () => {
+            if (this.modoFPSActivo && !this.estaEnXR()) return;
             this.teletransportarANodo(nodo.id);
           }
         )
@@ -199,25 +213,21 @@ export class LocomocionVR {
       this.ajustes.activarVinetaConfort(260);
     }
 
-    if (
-      this.xr &&
-      this.xr.baseExperience &&
-      this.xr.baseExperience.state === WebXRState.IN_XR
-    ) {
+    if (this.estaEnXR() && this.xr) {
       const alturaOjos = this.ajustes?.valores.modoSentado ? 1.45 : 1.6;
-      this.xr.baseExperience.camera.position.set(2.8, alturaOjos, -2.3);
+      this.xr.baseExperience.camera.position.set(3.05, alturaOjos, -2.2);
     }
 
     if (this.camara) {
-      this.camara.target = new Vector3(2.8, 0.9, -3.4);
+      this.camara.target = new Vector3(3.05, 0.9, -3.4);
       this.camara.alpha = -Math.PI / 2;
       this.camara.beta = Math.PI / 2.4;
       this.camara.radius = 2.2;
     }
 
     this.onTeletransportar?.(
-      new Vector3(2.8, 1.55, -2.1),
-      new Vector3(2.8, 0.95, -3.4)
+      new Vector3(3.05, 1.55, -2.05),
+      new Vector3(3.05, 0.95, -3.4)
     );
   }
 
@@ -230,25 +240,21 @@ export class LocomocionVR {
       this.ajustes.activarVinetaConfort(260);
     }
 
-    if (
-      this.xr &&
-      this.xr.baseExperience &&
-      this.xr.baseExperience.state === WebXRState.IN_XR
-    ) {
+    if (this.estaEnXR() && this.xr) {
       const alturaOjos = this.ajustes?.valores.modoSentado ? 1.45 : 1.6;
-      this.xr.baseExperience.camera.position.set(-2.2, alturaOjos, -2.5);
+      this.xr.baseExperience.camera.position.set(-3.1, alturaOjos, -2.2);
     }
 
     if (this.camara) {
-      this.camara.target = new Vector3(-2.2, 0.95, -3.6);
+      this.camara.target = new Vector3(-3.1, 0.95, -3.4);
       this.camara.alpha = -Math.PI / 2;
       this.camara.beta = Math.PI / 2.4;
       this.camara.radius = 2.2;
     }
 
     this.onTeletransportar?.(
-      new Vector3(-2.8, 1.55, -2.1),
-      new Vector3(-3.0, 0.95, -3.4)
+      new Vector3(-3.1, 1.55, -2.1),
+      new Vector3(-3.1, 0.95, -3.4)
     );
   }
 }

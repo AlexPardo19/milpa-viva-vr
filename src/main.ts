@@ -47,7 +47,7 @@ import { MaizEstilizado } from "./maiz_estilizado";
 import { PanelesVR } from "./paneles_vr";
 import { SurcoMilpa } from "./surco_milpa";
 import { CarritoAgricola3D } from "./vr/canasta_cosecha";
-import { registrarSolidoDesdeNodo } from "./colisiones";
+import { actualizarCaja, registrarSolidoDesdeNodo } from "./colisiones";
 import { MesaClimaPrejuego } from "./vr/mesa_clima_prejuego";
 import { LocomocionVR } from "./vr/locomocion_vr";
 import { InteraccionManos6DoF } from "./vr/interaccion_manos_6dof";
@@ -55,7 +55,13 @@ import { CinturonHerramientas } from "./vr/cinturon_herramientas";
 import { RelojMuneca } from "./vr/reloj_muneca";
 import { UiPoke } from "./vr/ui_poke";
 import { EspantapajarosGuia } from "./educativo/espantapajaros_guia";
-import { VARIEDADES_MAIZ, REGLAS_JUEGO } from "./nucleo";
+import {
+  Etapa,
+  TipoSemilla,
+  VARIEDADES_MAIZ,
+  REGLAS_JUEGO,
+  nombreEtapa
+} from "./nucleo";
 import { AudioSintetizador } from "./audio_sintetizador";
 import { ControladorJugador } from "./controlador_jugador";
 import { ControladorXbox } from "./controlador_xbox";
@@ -71,6 +77,7 @@ import { ParticulasEducativas } from "./educativo/particulas_educativas";
 import { Herramientas3D } from "./educativo/herramientas_3d";
 import { UIEducativa } from "./educativo/ui_infantil";
 import { PanelClima } from "./educativo/panel_clima";
+import { FichaCultivoModal } from "./educativo/ficha_cultivo";
 
 // Módulos de juego v4.0 «Milpa Viva VR»
 import { BusEventos } from "./juego/bus_eventos";
@@ -119,6 +126,8 @@ let particulasEdu: ParticulasEducativas | null = null;
 let herramientas3D: Herramientas3D | null = null;
 let uiEdu: UIEducativa | null = null;
 let panelClima: PanelClima | null = null;
+let fichaCultivo: FichaCultivoModal | null = null;
+let climaAntesEvento: { temperatura: number; lluvia: number; viento: number } | null = null;
 
 // Referencias a los componentes de la escena
 let camaraPrincipal: ArcRotateCamera | null = null;
@@ -322,7 +331,10 @@ async function crearEscena(): Promise<Scene> {
       const estaEnXR = state === WebXRState.IN_XR;
       ambiente?.estiloPatrix.ajustarPostProcesoXR(estaEnXR);
       if (estaEnXR) {
+        scene.skipPointerDownPicking = false;
         modalControles?.notificarEstadoXR(true);
+      } else if (controladorJugador?.modo === "fps") {
+        scene.skipPointerDownPicking = true;
       }
     });
     console.log("WebXR inicializado e inyectado en sistemas 6DoF.", xrExperience);
@@ -352,6 +364,10 @@ async function crearEscena(): Promise<Scene> {
     ajustesSistema
   );
   interaccion6DoF.onMensajeToast = (msg) => uiEdu?.mostrarToast(msg);
+  interaccion6DoF.onEjecutarAccionUnificada = (herramienta, nodoId) => {
+    if (surcoMilpa) surcoMilpa.nodoSeleccionadoId = nodoId;
+    ejecutarAccion(herramienta);
+  };
 
   // E.2. Cinturón Diegético de Herramientas (M2), Reloj de Muñeca (M2) y UI Poke (M13)
   cinturonVR = new CinturonHerramientas(scene);
@@ -409,13 +425,27 @@ async function crearEscena(): Promise<Scene> {
       });
     }
   };
-  directorEventos.onForzarClima = (tempOffset, lluviaNivel) => {
-    if (tempOffset === 0 && lluviaNivel === 0) {
-      clima.temperatura = CLIMA_INICIAL.temperatura;
-      clima.lluvia = CLIMA_INICIAL.lluvia;
+  directorEventos.onForzarClima = (tempOffset, lluviaNivel, vientoObjetivo, restaurar) => {
+    if (restaurar) {
+      if (climaAntesEvento) {
+        clima.temperatura = climaAntesEvento.temperatura;
+        clima.lluvia = climaAntesEvento.lluvia;
+        clima.viento = climaAntesEvento.viento;
+        climaAntesEvento = null;
+      }
     } else {
-      clima.temperatura = Math.max(-2, CLIMA_INICIAL.temperatura + tempOffset);
+      if (!climaAntesEvento) {
+        climaAntesEvento = {
+          temperatura: clima.temperatura,
+          lluvia: clima.lluvia,
+          viento: clima.viento
+        };
+      }
+      clima.temperatura = Math.max(-6, climaAntesEvento.temperatura + tempOffset);
       clima.lluvia = lluviaNivel === 2 ? 32 : lluviaNivel === 1 ? 12 : 0;
+      if (vientoObjetivo !== undefined) {
+        clima.viento = vientoObjetivo;
+      }
     }
     metricas = calcularMetricas(clima);
     ambiente?.aplicarClima(clima, metricas);
@@ -446,21 +476,103 @@ async function crearEscena(): Promise<Scene> {
     busEventos
   );
   almacenMazorcas.onMensajeToast = (msg) => uiEdu?.mostrarToast(msg);
-  almacenMazorcas.onCambioInventario = () => {
-    if (uiEdu && almacenMazorcas) {
-      uiEdu.actualizarInventarioMazorcas(
-        almacenMazorcas.totalEnMano,
-        almacenMazorcas.totalAlmacenado
-      );
-    }
-  };
-  fogonCocina.onConsumirMazorcaAlmacen = () => {
-    if (!almacenMazorcas) return { exito: false, calidad: 0.85 };
-    return almacenMazorcas.consumirMazorcaDisponible();
+  almacenMazorcas.onAbrirCofre = () => {
+    controladorJugador?.liberarPuntero();
+    modalCofreTroje?.alternar();
   };
 
-  // Inicializar Sistema de Inventario y Hotbar Estilo Minecraft
+  // Inicializar Sistema de Inventario y Hotbar Estilo Minecraft (fuente única de verdad)
   inventarioJugador = new Inventario(36);
+  inventarioTroje = new Inventario(27);
+
+  function tipoPorNombreVariedad(nombre?: string): TipoSemilla {
+    const l = (nombre || "").toLowerCase();
+    if (l.includes("azul")) return "azul";
+    if (l.includes("rojo")) return "rojo";
+    if (l.includes("palomero")) return "palomero";
+    return "chalqueno";
+  }
+
+  function contarMazorcasTotales(variedad?: TipoSemilla): number {
+    if (!inventarioJugador || !inventarioTroje) return 0;
+    if (!variedad) {
+      return inventarioJugador.cuenta("mazorca") + inventarioTroje.cuenta("mazorca");
+    }
+    const nombreVar = VARIEDADES_MAIZ[variedad].nombre;
+    return (
+      inventarioJugador.cuentaPorVariedad("mazorca", nombreVar) +
+      inventarioTroje.cuentaPorVariedad("mazorca", nombreVar)
+    );
+  }
+
+  function consumirMazorcaReal(variedadPreferida?: TipoSemilla): {
+    exito: boolean;
+    variedad?: TipoSemilla;
+    calidad: number;
+    madurez?: "elote" | "grano_seco";
+  } {
+    const prefNombre = variedadPreferida ? VARIEDADES_MAIZ[variedadPreferida].nombre : undefined;
+    // Priorizar mochila/mano del jugador, luego Troje
+    const resJug = inventarioJugador?.consumirMazorca(prefNombre);
+    const res = resJug?.exito ? resJug : inventarioTroje?.consumirMazorca(prefNombre);
+    if (!res || !res.exito) {
+      return { exito: false, calidad: 0.85 };
+    }
+    const tipoVar = tipoPorNombreVariedad(res.variedad);
+    carritoAgricola?.canasta?.retirarMazorca(tipoVar, 1);
+    almacenMazorcas?.onCambioInventario?.();
+    return {
+      exito: true,
+      variedad: tipoVar,
+      calidad: res.calidad,
+      madurez: res.madurez
+    };
+  }
+
+  function actualizarContadoresHUDMazorcas(): void {
+    if (!uiEdu || !inventarioJugador || !inventarioTroje) return;
+    uiEdu.actualizarInventarioMazorcas(
+      inventarioJugador.cuenta("mazorca"),
+      inventarioTroje.cuenta("mazorca")
+    );
+  }
+
+  almacenMazorcas.onCambioInventario = actualizarContadoresHUDMazorcas;
+
+  fogonCocina.onConsumirMazorcaAlmacen = (variedadPreferida) => {
+    return consumirMazorcaReal(
+      variedadPreferida ? tipoPorNombreVariedad(variedadPreferida) : undefined
+    );
+  };
+  fogonCocina.onContarDespensa = () => ({
+    mazorcas: contarMazorcasTotales(),
+    frijol: carritoAgricola?.canasta.frijol ?? 0,
+    calabaza: carritoAgricola?.canasta.calabaza ?? 0,
+    quelites:
+      (carritoAgricola?.canasta.quelites ?? 0) +
+      (inventarioJugador?.cuenta("quelite") ?? 0) +
+      (inventarioTroje?.cuenta("quelite") ?? 0),
+    huitlacoche:
+      (carritoAgricola?.canasta.huitlacoche ?? 0) +
+      (inventarioJugador?.cuenta("huitlacoche") ?? 0) +
+      (inventarioTroje?.cuenta("huitlacoche") ?? 0)
+  });
+  fogonCocina.onConsumirIngrediente = (tipo) => {
+    if (carritoAgricola?.canasta?.consumirIngrediente(tipo, 1)) {
+      return true;
+    }
+    if (tipo === "quelite" || tipo === "huitlacoche") {
+      if ((inventarioJugador?.cuenta(tipo) ?? 0) > 0) {
+        inventarioJugador?.consumirPorId(tipo, 1);
+        return true;
+      }
+      if ((inventarioTroje?.cuenta(tipo) ?? 0) > 0) {
+        inventarioTroje?.consumirPorId(tipo, 1);
+        return true;
+      }
+    }
+    return false;
+  };
 
   function restablecerInventarioInicial(): void {
     if (!inventarioJugador) return;
@@ -470,16 +582,16 @@ async function crearEscena(): Promise<Scene> {
     // Hotbar (0-8): Manos, Azada, 4 Razas de Semillas separadas, Agua, Abono, Cosecha
     inventarioJugador.slots[0] = { id: "mano", cantidad: 1 };
     inventarioJugador.slots[1] = { id: "azada", cantidad: 1 };
-    inventarioJugador.slots[2] = { id: "semilla_chalqueno", cantidad: 16 };
-    inventarioJugador.slots[3] = { id: "semilla_azul", cantidad: 16 };
-    inventarioJugador.slots[4] = { id: "semilla_rojo", cantidad: 16 };
-    inventarioJugador.slots[5] = { id: "semilla_palomero", cantidad: 16 };
+    inventarioJugador.slots[2] = { id: "semilla_chalqueno", cantidad: 12 };
+    inventarioJugador.slots[3] = { id: "semilla_azul", cantidad: 12 };
+    inventarioJugador.slots[4] = { id: "semilla_rojo", cantidad: 12 };
+    inventarioJugador.slots[5] = { id: "semilla_palomero", cantidad: 12 };
     inventarioJugador.slots[6] = { id: "regadera", cantidad: 1 };
     inventarioJugador.slots[7] = { id: "abono", cantidad: 32 };
     inventarioJugador.slots[8] = { id: "cosecha", cantidad: 1 };
     // Mochila (9-11): Cultivos asociados (Frijol/Calabaza) y Amuleto Sol +15d
-    inventarioJugador.slots[9] = { id: "frijol", cantidad: 16 };
-    inventarioJugador.slots[10] = { id: "calabaza", cantidad: 16 };
+    inventarioJugador.slots[9] = { id: "frijol", cantidad: 12 };
+    inventarioJugador.slots[10] = { id: "calabaza", cantidad: 12 };
     inventarioJugador.slots[11] = { id: "sol", cantidad: 1 };
     inventarioJugador.notificar();
   }
@@ -494,64 +606,32 @@ async function crearEscena(): Promise<Scene> {
   dispensadorSemillas.onMensajeToast = (msg) => uiEdu?.mostrarToast(msg);
   dispensadorSemillas.onActualizarUI = () => hotbarPixel?.actualizarVisual();
 
-  // Colisiones físicas: los objetos sólidos de la parcela ya no se pueden atravesar
-  if (almacenMazorcas) registrarSolidoDesdeNodo(almacenMazorcas.raiz, "almacen", 0.05);
-  if (fogonCocina) registrarSolidoDesdeNodo(fogonCocina.raiz, "fogon", 0.05);
-  if (bancoSemillas) registrarSolidoDesdeNodo(bancoSemillas.raiz, "banco", 0.05);
-  if (codiceMaiz) registrarSolidoDesdeNodo(codiceMaiz.raiz, "codice", 0.05);
-  if (espantapajaros) registrarSolidoDesdeNodo(espantapajaros.root, "espantapajaros", 0.0);
-  if (mesaClimaPrejuego) registrarSolidoDesdeNodo(mesaClimaPrejuego.root, "mesaClima", 0.02);
-
-  inventarioTroje = new Inventario(27);
-  // Sincronizar estado inicial del almacén con la troje
-  const varsInit: Array<keyof typeof almacenMazorcas.almacenadoPorVariedad> = [
-    "chalqueno",
-    "azul",
-    "rojo",
-    "palomero"
-  ];
-  for (const t of varsInit) {
-    const c = almacenMazorcas.almacenadoPorVariedad[t] || 0;
-    if (c > 0) {
-      inventarioTroje.anadir({
-        id: "mazorca",
-        cantidad: c,
-        meta: { variedad: VARIEDADES_MAIZ[t].nombre, calidad: 0.9 }
-      });
-    }
-  }
-
-  // Mantener sincronizado el inventario del troje con los conteos de almacenMazorcas
+  // Mantener sincronizado el inventario de la Troje y del Jugador con los visuales 3D y el HUD
+  inventarioJugador.suscribir(() => {
+    actualizarContadoresHUDMazorcas();
+  });
   inventarioTroje.suscribir(() => {
-    if (!almacenMazorcas) return;
-    almacenMazorcas.almacenadoPorVariedad.chalqueno = inventarioTroje!.cuentaPorVariedad(
+    if (!almacenMazorcas || !inventarioTroje) return;
+    almacenMazorcas.almacenadoPorVariedad.chalqueno = inventarioTroje.cuentaPorVariedad(
       "mazorca",
       VARIEDADES_MAIZ.chalqueno.nombre
     );
-    almacenMazorcas.almacenadoPorVariedad.azul = inventarioTroje!.cuentaPorVariedad(
+    almacenMazorcas.almacenadoPorVariedad.azul = inventarioTroje.cuentaPorVariedad(
       "mazorca",
       VARIEDADES_MAIZ.azul.nombre
     );
-    almacenMazorcas.almacenadoPorVariedad.rojo = inventarioTroje!.cuentaPorVariedad(
+    almacenMazorcas.almacenadoPorVariedad.rojo = inventarioTroje.cuentaPorVariedad(
       "mazorca",
       VARIEDADES_MAIZ.rojo.nombre
     );
-    almacenMazorcas.almacenadoPorVariedad.palomero = inventarioTroje!.cuentaPorVariedad(
+    almacenMazorcas.almacenadoPorVariedad.palomero = inventarioTroje.cuentaPorVariedad(
       "mazorca",
       VARIEDADES_MAIZ.palomero.nombre
     );
     almacenMazorcas.actualizarVisualesTroje();
     almacenMazorcas.guardarAlmacen();
-    almacenMazorcas.onCambioInventario?.();
+    actualizarContadoresHUDMazorcas();
   });
-
-  function tipoPorNombreVariedad(nombre?: string): "chalqueno" | "azul" | "rojo" | "palomero" {
-    const l = (nombre || "").toLowerCase();
-    if (l.includes("azul")) return "azul";
-    if (l.includes("rojo")) return "rojo";
-    if (l.includes("palomero")) return "palomero";
-    return "chalqueno";
-  }
 
   cursorInventario = new CursorInventario();
   hotbarPixel = new HotbarPixel(inventarioJugador, cursorInventario, {
@@ -598,7 +678,10 @@ async function crearEscena(): Promise<Scene> {
       if (res) uiEdu?.mostrarToast(res.mensaje);
     },
     onSol: () => {
-      ejecutarAccion("sol");
+      avanzarDiasConAutopausa(15);
+    },
+    onAvanzarDias: (dias) => {
+      avanzarDiasConAutopausa(dias);
     },
     onAbrirMochila: () => {
       controladorJugador?.liberarPuntero();
@@ -612,26 +695,41 @@ async function crearEscena(): Promise<Scene> {
 
   modalCofreTroje = new ModalCofreTroje(inventarioTroje, inventarioJugador, cursorInventario);
 
+  const obtenerPosJugadorActiva = (): Vector3 => {
+    if (
+      xrExperience &&
+      xrExperience.baseExperience &&
+      xrExperience.baseExperience.state === WebXRState.IN_XR
+    ) {
+      return xrExperience.baseExperience.camera.position;
+    }
+    return controladorJugador ? controladorJugador.posicionMundo : Vector3.Zero();
+  };
+
   sistemaDrops = new SistemaDrops(
     scene,
     inventarioJugador,
-    () => (controladorJugador ? controladorJugador.posicionMundo : Vector3.Zero()),
+    obtenerPosJugadorActiva,
     (stack) => {
-      audioSintetizador?.campanita(controladorJugador?.posicionMundo ?? Vector3.Zero());
-      const nom = stack.meta?.variedad ? `Mazorca de ${stack.meta.variedad}` : stack.id;
-      uiEdu?.mostrarToast(`🌽 +${stack.cantidad} ${nom}`);
-      if (stack.id === "mazorca" && carritoAgricola?.canasta) {
-        const tipoVar = tipoPorNombreVariedad(stack.meta?.variedad);
-        for (let i = 0; i < stack.cantidad; i++) {
-          carritoAgricola.canasta.depositarMazorca(
-            VARIEDADES_MAIZ[tipoVar],
-            undefined,
-            stack.meta?.calidad ?? 0.9
-          );
+      audioSintetizador?.campanita(obtenerPosJugadorActiva());
+      if (stack.id === "huitlacoche") {
+        carritoAgricola?.canasta?.depositarIngrediente("huitlacoche", stack.cantidad);
+        uiEdu?.mostrarToast(`🍄 +${stack.cantidad} Huitlacoche gourmet recogido (cocínalo en el Fogón [F])`);
+      } else {
+        const nom = stack.meta?.variedad ? `Mazorca de ${stack.meta.variedad}` : DEFS[stack.id]?.nombre || stack.id;
+        uiEdu?.mostrarToast(`🌽 +${stack.cantidad} ${nom}`);
+        if (stack.id === "mazorca" && carritoAgricola?.canasta) {
+          const tipoVar = tipoPorNombreVariedad(stack.meta?.variedad);
+          for (let i = 0; i < stack.cantidad; i++) {
+            carritoAgricola.canasta.depositarMazorca(
+              VARIEDADES_MAIZ[tipoVar],
+              undefined,
+              stack.meta?.calidad ?? 0.9
+            );
+          }
         }
       }
-      almacenMazorcas?.onCambioInventario?.();
-      almacenMazorcas?.actualizarVisualesTroje();
+      actualizarContadoresHUDMazorcas();
     },
     () => {
       uiEdu?.mostrarToast("⚠️ ¡Inventario lleno! Guarda mazorcas en la Troje [I]");
@@ -663,9 +761,36 @@ async function crearEscena(): Promise<Scene> {
     busEventos
   );
   bancoSemillas.onMensajeToast = (msg) => uiEdu?.mostrarToast(msg);
+  bancoSemillas.onConsumirMazorca = (variedadPreferida) =>
+    consumirMazorcaReal(variedadPreferida ? tipoPorNombreVariedad(variedadPreferida) : undefined);
+  bancoSemillas.onContarMazorcas = () => contarMazorcasTotales();
+  bancoSemillas.onEntregarSemillas = (variedad, cantidad) => {
+    const res = inventarioJugador?.agregar({ id: `semilla_${variedad}`, cantidad });
+    hotbarPixel?.actualizarVisual();
+    guardarPartidaActual();
+    return cantidad - (res?.sobrante ?? 0);
+  };
 
   codiceMaiz = new CodiceMaiz(scene, audioSintetizador, busEventos);
   codiceMaiz.onMensajeToast = (msg) => uiEdu?.mostrarToast(msg);
+
+  fichaCultivo = new FichaCultivoModal();
+  (window as any).fichaCultivo = fichaCultivo;
+
+  // Colisiones físicas: registradas DESPUÉS de instanciar todas las estaciones 3D (incluye Banco y Códice)
+  if (almacenMazorcas) registrarSolidoDesdeNodo(almacenMazorcas.raiz, "almacen", 0.05);
+  if (fogonCocina) registrarSolidoDesdeNodo(fogonCocina.raiz, "fogon", 0.05);
+  if (bancoSemillas) registrarSolidoDesdeNodo(bancoSemillas.raiz, "banco", 0.05);
+  if (codiceMaiz) registrarSolidoDesdeNodo(codiceMaiz.raiz, "codice", 0.05);
+  if (espantapajaros) registrarSolidoDesdeNodo(espantapajaros.root, "espantapajaros", 0.02);
+
+  ajustesSistema.onBorrarProgreso = () => {
+    bancoSemillas?.reiniciar();
+    codiceMaiz?.reiniciar();
+  };
+  ajustesSistema.suscribir((cfg) => {
+    if (controladorXbox) controladorXbox.factorHaptico = cfg.intensidadHaptica;
+  });
 
   misionesSistema = new MisionesSistema(busEventos, codiceMaiz, audioSintetizador);
   misionesSistema.onMensajeToast = (msg) => uiEdu?.mostrarToast(msg);
@@ -757,7 +882,9 @@ async function crearEscena(): Promise<Scene> {
         malezaSistema?.deshierbarNodo(id, 0.65);
         break;
       case "fauna":
-        faunaMilpa?.limpiarPlagasEnNodo(id);
+        if (!faunaMilpa?.interactuarPorMeshName(meshName)) {
+          faunaMilpa?.limpiarPlagasEnNodo(id);
+        }
         break;
       case "triada_cosecha":
         triadaViva?.cosecharAsociado(
@@ -773,20 +900,20 @@ async function crearEscena(): Promise<Scene> {
     const n = surcoMilpa.nodos[nodoId];
     if (!n) return;
 
-    // Prioridad contextual estilo Minecraft con Clic Derecho:
-    if (
-      n.sembrada &&
-      !n.cosechada &&
-      n.diasCultivo >= REGLAS_JUEGO.DIAS_COSECHA_MIN &&
-      (n.plantaInterna.estado !== "MUERTA" || n.plantaInterna.causaMuerte === "agotamiento")
-    ) {
+    // Prioridad contextual estilo Minecraft con Clic Derecho (dirigida por fenología real):
+    if (surcoMilpa.estaListoParaCosecha(nodoId)) {
       ejecutarAccion("cosecha");
     } else if (n.cosechada || (n.sembrada && n.plantaInterna.estado === "MUERTA")) {
       ejecutarQuitarPlanta(nodoId);
     } else if (n.maleza > 10 || n.plaga > 10) {
       malezaSistema?.deshierbarNodo(nodoId, 0.6);
       faunaMilpa?.limpiarPlagasEnNodo(nodoId);
-    } else if (n.sembrada && n.diasCultivo >= 55 && n.diasCultivo <= 95 && n.polinizacion < 0.95) {
+    } else if (
+      n.sembrada &&
+      surcoMilpa.obtenerEtapaNodo(nodoId) >= Etapa.VT &&
+      surcoMilpa.obtenerEtapaNodo(nodoId) <= Etapa.R2 &&
+      n.polinizacion < 0.95
+    ) {
       polinizacionSistema?.polinizarManual(nodoId);
     } else {
       ejecutarAccion(estadoEdu.herramientaSeleccionada);
@@ -818,6 +945,7 @@ async function crearEscena(): Promise<Scene> {
         obj === "fogon" ||
         obj === "banco" ||
         obj === "codice" ||
+        obj === "mesa_clima" ||
         obj === "don_elote"
       ) {
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", code: "KeyE" }));
@@ -829,7 +957,7 @@ async function crearEscena(): Promise<Scene> {
       }
     },
     onAvanzarSol: () => {
-      ejecutarAccion("sol");
+      avanzarDiasConAutopausa(15);
     },
     onAbrirClima: () => {
       controladorJugador?.liberarPuntero();
@@ -859,6 +987,7 @@ async function crearEscena(): Promise<Scene> {
       uiEdu?.mostrarToast(msg);
     },
   });
+  controladorXbox.factorHaptico = ajustesSistema.valores.intensidadHaptica;
 
   // Exponer referencias globales para depuración y pruebas automatizadas
   (window as any).camaraPrincipal = camera;
@@ -918,9 +1047,8 @@ async function crearEscena(): Promise<Scene> {
       ambiente?.aplicarClima(clima, metricas);
       paneles?.actualizarTelemetria(metricas, estadoCrecimiento);
       paneles?.actualizarConsola(estadoCrecimiento, clima);
-
-      estadoEdu.humedadSuelo = Math.min(100, Math.max(10, (clima.humedadSuelo / 32) * 55));
-      ambiente?.actualizarHumedadVisual(estadoEdu.humedadSuelo);
+      ambiente?.actualizarHumedadVisual(Math.min(100, Math.max(0, (clima.humedadSuelo / 55) * 100)));
+      sincronizarNodoConUI();
     },
     onToggleCicloSolar: () => {
       cicloSolarAuto = !cicloSolarAuto;
@@ -930,18 +1058,41 @@ async function crearEscena(): Promise<Scene> {
     }
   });
 
-  // I. Sincronización de estado de nodo seleccionado con HUD Educativo
+  function obtenerFactorDificultadMaleza(): number {
+    if (dificultadMundo === "tranquilo") return 0.5;
+    if (dificultadMundo === "extremo") return 1.5;
+    return 1.0;
+  }
+
+  // I. Sincronización de estado de nodo seleccionado con HUD Educativo y Ficha Clínica
   function sincronizarNodoConUI(): void {
     if (!surcoMilpa) return;
     const nodo = surcoMilpa.nodos[surcoMilpa.nodoSeleccionadoId];
     if (!nodo) return;
     const dia = nodo.diasCultivo;
+    const varCfg = VARIEDADES_MAIZ[nodo.variedad];
+    const p = nodo.plantaInterna;
+
     estadoEdu.tierraArada = Math.round(nodo.tierraArada);
-    estadoEdu.humedadSuelo = Math.min(100, Math.max(10, Math.round((nodo.humedadVWC / 32) * 55)));
+    estadoEdu.humedadSuelo = Math.round(nodo.humedadVWC);
     estadoEdu.nutrientesSuelo = Math.round(nodo.nutrientesNPK);
     estadoEdu.semillaSembrada = nodo.sembrada;
     estadoEdu.eloteCosechado = nodo.cosechada;
     estadoEdu.diaActual = Math.floor(dia);
+
+    let etapaTexto = "Suelo sin arar";
+    if (!nodo.sembrada) {
+      etapaTexto = nodo.tierraArada >= 100 ? "Tierra Lista" : "Suelo sin arar";
+    } else if (nodo.cosechada) {
+      etapaTexto = "Rastrojo (Cosechada)";
+    } else if (p.estado === "MUERTA") {
+      etapaTexto = `💀 Muerta (${p.causaMuerte || "estrés"})`;
+    } else if (p.estado === "SEMILLA") {
+      etapaTexto = "🌰 Germinando";
+    } else {
+      etapaTexto = nombreEtapa(surcoMilpa.obtenerEtapaNodo(nodo.id));
+    }
+    uiEdu?.actualizarTelemetriaParcela(etapaTexto, varCfg.vwcOptimoMin, varCfg.vwcOptimoMax);
 
     // Actualizar dinámicamente la fase educativa según el estado real de la estación seleccionada
     if (estadoEdu.fase !== "celebrar") {
@@ -949,20 +1100,108 @@ async function crearEscena(): Promise<Scene> {
         estadoEdu.fase = "arar";
       } else if (!nodo.sembrada) {
         estadoEdu.fase = "sembrar";
-      } else if (nodo.cosechada) {
+      } else if (nodo.cosechada || (p.estado === "MUERTA" && !surcoMilpa.estaListoParaCosecha(nodo.id))) {
         estadoEdu.fase = "arar";
-      } else if (nodo.humedadVWC < 20) {
-        estadoEdu.fase = "regar";
-      } else if (nodo.nutrientesNPK < 35) {
-        estadoEdu.fase = "abonar";
-      } else if (dia >= REGLAS_JUEGO.DIAS_COSECHA_MIN) {
+      } else if (surcoMilpa.estaListoParaCosecha(nodo.id)) {
         estadoEdu.fase = "cosechar";
+      } else if (nodo.humedadVWC < varCfg.vwcOptimoMin) {
+        estadoEdu.fase = "regar";
+      } else if (nodo.nutrientesNPK < 38) {
+        estadoEdu.fase = "abonar";
       } else {
         estadoEdu.fase = "crecer";
       }
     }
 
     uiEdu?.actualizarUI();
+    fichaCultivo?.actualizarSiAbierto(nodo, clima);
+  }
+
+  /**
+   * Avance granular de días (pasos de 1 día) con autopausa inteligente ante eventos críticos
+   * (muerte, sequía severa, encharcamiento, floración VT o madurez de cosecha R3/R6).
+   */
+  function avanzarDiasConAutopausa(diasTotales: number): void {
+    if (!surcoMilpa) return;
+    const pasos = Math.max(1, Math.round(diasTotales));
+    const etapasPrevias = surcoMilpa.nodos.map((n) => surcoMilpa!.obtenerEtapaNodo(n.id));
+    const estadosPrevios = surcoMilpa.nodos.map((n) => n.plantaInterna.estado);
+    let diasAvanzados = 0;
+    let motivoPausa: string | null = null;
+
+    for (let i = 0; i < pasos; i++) {
+      surcoMilpa.avanzarSimulacion(
+        1,
+        clima,
+        metricas,
+        directorEventos?.obtenerSeveridadActiva(),
+        obtenerFactorDificultadMaleza()
+      );
+      diasAvanzados++;
+
+      // Detectar hitos críticos para detener saltos largos antes de arruinar la cosecha
+      if (pasos > 1) {
+        for (let idx = 0; idx < surcoMilpa.nodos.length; idx++) {
+          const n = surcoMilpa.nodos[idx];
+          if (!n.sembrada || n.cosechada) continue;
+          const varCfg = VARIEDADES_MAIZ[n.variedad];
+          const p = n.plantaInterna;
+          const etapaAct = surcoMilpa.obtenerEtapaNodo(n.id);
+
+          if (p.estado === "MUERTA" && estadosPrevios[idx] !== "MUERTA") {
+            motivoPausa = `💀 Autopausa (+${diasAvanzados}d): Estación #${n.id + 1} (${varCfg.nombre}) murió por ${p.causaMuerte || "estrés"}.`;
+            break;
+          }
+          if (n.humedadVWC <= varCfg.pmp + 2.5 && p.estado !== "MUERTA") {
+            motivoPausa = `🏜️ Autopausa (+${diasAvanzados}d): Estación #${n.id + 1} en sequía crítica (${Math.round(n.humedadVWC)}% VWC). ¡Riega [7]!`;
+            break;
+          }
+          if (etapaAct >= Etapa.VT && etapasPrevias[idx] < Etapa.VT && n.polinizacion < 0.85) {
+            motivoPausa = `🌼 Autopausa (+${diasAvanzados}d): Estación #${n.id + 1} entró en Floración (VT). ¡Poliniza con [P]!`;
+            break;
+          }
+          if (etapaAct >= Etapa.R3 && etapasPrevias[idx] < Etapa.R3) {
+            motivoPausa = `🌽 Autopausa (+${diasAvanzados}d): Estación #${n.id + 1} alcanzó Elote Tierno (R3). Cosecha [9] o sigue hasta R6 Grano Seco.`;
+            break;
+          }
+          if (etapaAct >= Etapa.R6 && etapasPrevias[idx] < Etapa.R6) {
+            motivoPausa = `🌾 Autopausa (+${diasAvanzados}d): Estación #${n.id + 1} llegó a Madurez Fisiológica (R6 Grano Seco). ¡Cosecha [9]!`;
+            break;
+          }
+        }
+        if (motivoPausa) break;
+      }
+    }
+
+    malezaSistema?.actualizarThinInstances();
+    triadaViva?.actualizarVisuales();
+    audioSintetizador?.abono();
+
+    const nodoSel = surcoMilpa.nodos[surcoMilpa.nodoSeleccionadoId];
+    const diaMax = Math.max(...surcoMilpa.nodos.map((n) => n.diasCultivo || 0), 0);
+    busEventos.emitir({ t: "dia", dia: Math.floor(diaMax) });
+    misionesSistema?.actualizarCalendarioRitual(Math.floor(diaMax));
+    directorEventos?.evaluarDiaSimulado(Math.floor(diaMax));
+    evaluarPistasContextualesDonElote();
+
+    if (motivoPausa) {
+      uiEdu?.mostrarToast(motivoPausa);
+    } else if (nodoSel && nodoSel.sembrada) {
+      const p = nodoSel.plantaInterna;
+      const varCfg = VARIEDADES_MAIZ[nodoSel.variedad];
+      if (p.estado === "MUERTA") {
+        uiEdu?.mostrarToast(
+          `💀 Estación #${nodoSel.id + 1} (${varCfg.nombre}): Muerta por ${p.causaMuerte || "clima"}. Límpiala con [Q] o Azada [2].`
+        );
+      } else {
+        uiEdu?.mostrarToast(
+          `☀️ +${diasAvanzados}d · Estación #${nodoSel.id + 1}: Día ${Math.floor(nodoSel.diasCultivo)} (${nombreEtapa(surcoMilpa.obtenerEtapaNodo(nodoSel.id))})`
+        );
+      }
+    } else {
+      uiEdu?.mostrarToast(`☀️ ¡Avanzaron +${diasAvanzados} días en todo el surco de la milpa!`);
+    }
+    sincronizarNodoConUI();
   }
 
   /**
@@ -982,7 +1221,9 @@ async function crearEscena(): Promise<Scene> {
 
     const resQ = surcoMilpa.quitarPlanta(nodoId);
     if (resQ.exito) {
-      controladorJugador?.viewmodel.accionar();
+      if (controladorJugador?.modo === "fps") {
+        controladorJugador.viewmodel.accionar();
+      }
       herramientas3D?.animarAzada();
       audioSintetizador?.ararTierra(nodo.posicionMundo);
       faunaMilpa?.desactivarAgentesEnNodo(nodoId);
@@ -997,6 +1238,7 @@ async function crearEscena(): Promise<Scene> {
   }
 
   let mazorcasCosechadasEstaSesion = 0;
+  let logroPrimeraCosechaMostrado = false;
 
   // J. Ejecución de Acciones Agronómicas y Educativas
   function ejecutarAccion(herramienta: HerramientaTipo): void {
@@ -1006,7 +1248,11 @@ async function crearEscena(): Promise<Scene> {
     switch (herramienta) {
       case "azada":
         if (surcoMilpa && nodo) {
+          const estabaEncharcada = nodo.humedadVWC > 45;
           const resA = surcoMilpa.arar(nodoId, 1.0);
+          if (estabaEncharcada) {
+            directorEventos?.registrarDrenaje();
+          }
           herramientas3D?.animarAzada();
           audioSintetizador?.golpeAzada(1.0, nodo.posicionMundo);
           faunaMilpa?.desactivarAgentesEnNodo(nodoId);
@@ -1067,19 +1313,16 @@ async function crearEscena(): Promise<Scene> {
 
           if (slotSemillaIdx < 0) {
             uiEdu?.mostrarToast(
-              `⚠️ ¡Te quedaste sin semillas de esa raza! Abre el Dispensador de Semillas [U] para reponer.`
+              `⚠️ ¡Te quedaste sin semillas de esa raza! Desgrana mazorcas en el Banco [M] o acude al Dispensador [U].`
             );
             espantapajaros?.decir(
-              `🌰 Se agotaron esas semillas. Acude al Dispensador Comunal de Semillas [U] en el patio.`
+              `🌰 Se agotaron esas semillas. Desgrana una mazorca en el Banco [M] o repón respaldo en el Dispensador [U].`
             );
             break;
           }
 
-          const loteActivo = bancoSemillas?.obtenerLoteActivo();
-          const rasgosCompat =
-            loteActivo && tipoPorNombreVariedad(loteActivo.raza) === variedadElegida
-              ? loteActivo.rasgos
-              : undefined;
+          // Herencia genética por raza desde el Banco de Semillas (sin mutar cultivos ya sembrados)
+          const rasgosCompat = bancoSemillas?.obtenerRasgosParaVariedad(variedadElegida);
 
           const resS = surcoMilpa.sembrar(nodoId, variedadElegida, rasgosCompat);
           if (resS.exito) {
@@ -1093,13 +1336,13 @@ async function crearEscena(): Promise<Scene> {
             const restantes = inventarioJugador.cuenta(idConsumido);
             if (restantes === 0) {
               uiEdu?.mostrarToast(
-                `${resS.mensaje} ⚠️ (Se agotó tu pila; repón más en el Dispensador [U])`
+                `${resS.mensaje} ⚠️ (Se agotó tu pila; desgrana en Banco [M] o repón en Dispensador [U])`
               );
             } else {
               uiEdu?.mostrarToast(resS.mensaje);
             }
             espantapajaros?.decir(
-              `¡Sembraste ${varCfg.nombre}! Asocia Frijol [B] y Calabaza [N] o riega con [7].`
+              `¡Sembraste ${varCfg.nombre}! Riega con [7] para germinar, y asocia Frijol [B] y Calabaza [N].`
             );
           } else {
             uiEdu?.mostrarToast(resS.mensaje);
@@ -1156,7 +1399,17 @@ async function crearEscena(): Promise<Scene> {
 
       case "abono":
         if (surcoMilpa && nodo) {
+          if (inventarioJugador && inventarioJugador.cuenta("abono") <= 0) {
+            uiEdu?.mostrarToast(
+              "⚠️ ¡Sin abono en mochila! Siembra Frijol Ayocote [B] para fijar Nitrógeno natural con Rhizobium."
+            );
+            break;
+          }
           const resAb = surcoMilpa.abonar(nodoId);
+          if (resAb.exito) {
+            inventarioJugador?.consumirPorId("abono", 1);
+            hotbarPixel?.actualizarVisual();
+          }
           herramientas3D?.animarAbono();
           audioSintetizador?.abono(nodo.posicionMundo);
           busEventos.emitir({ t: "abono", nodo: nodoId, dosis: 25 });
@@ -1165,37 +1418,7 @@ async function crearEscena(): Promise<Scene> {
         break;
 
       case "sol":
-        if (surcoMilpa) {
-          surcoMilpa.avanzarSimulacion(15, clima, metricas);
-          malezaSistema?.actualizarThinInstances();
-          triadaViva?.actualizarVisuales();
-          audioSintetizador?.abono();
-          if (nodo) {
-            const dia = nodo.diasCultivo;
-            busEventos.emitir({ t: "dia", dia });
-            directorEventos?.evaluarDiaSimulado(dia);
-            evaluarPistasContextualesDonElote();
-            const p = nodo.plantaInterna;
-            const varCfg = VARIEDADES_MAIZ[nodo.variedad];
-            if (p.estado === "MUERTA") {
-              uiEdu?.mostrarToast(
-                `💀 Estación #${nodo.id + 1} (${varCfg.nombre}): Se secó/murió por ${p.causaMuerte || "clima"}. Límpiala con Azada [2].`
-              );
-            } else if ((p.secado ?? 0) > 0.35) {
-              uiEdu?.mostrarToast(
-                `🌾 Estación #${nodo.id + 1}: Tope de altura (${p.alturaMetros.toFixed(1)}m) y secándose (${Math.round((p.secado ?? 0) * 100)}%). ¡Riega [7] o Cosecha [9]!`
-              );
-            } else if (p.limiteAlcanzado) {
-              uiEdu?.mostrarToast(
-                `☀️ +15 días (Día ${Math.floor(dia)}) · ${varCfg.nombre} alcanzó su límite de altura (${p.alturaMetros.toFixed(1)}m) y madura el grano.`
-              );
-            } else {
-              uiEdu?.mostrarToast("☀️ ¡Avanzaron 15 días en todo el surco de la milpa!");
-            }
-          } else {
-            uiEdu?.mostrarToast("☀️ ¡Avanzaron 15 días en todo el surco de la milpa!");
-          }
-        }
+        avanzarDiasConAutopausa(15);
         break;
 
       case "cosecha":
@@ -1204,24 +1427,24 @@ async function crearEscena(): Promise<Scene> {
           if (resC.exito && resC.variedad) {
             audioSintetizador?.cosecha(nodo.posicionMundo);
             const cantDrops = nodo.frijolVid > 0.25 && nodo.calabazaCobertura > 0.25 ? 3 : 2;
+            const madurez = resC.tipoCosecha === "grano_seco" ? "grano_seco" : "elote";
             if (sistemaDrops) {
               for (let k = 0; k < cantDrops; k++) {
                 sistemaDrops.soltar(
                   {
                     id: "mazorca",
                     cantidad: 1,
-                    meta: { variedad: resC.variedad.nombre, calidad: resC.calidad || 0.9 }
+                    meta: { variedad: resC.variedad.nombre, calidad: resC.calidad || 0.9, madurez }
                   },
                   nodo.posicionMundo
                 );
               }
-            } else {
-              almacenMazorcas?.spawnearDropsCosecha(
-                resC.variedad,
-                nodo.posicionMundo,
-                resC.calidad || 0.9,
-                cantDrops
-              );
+              if (resC.tieneHuitlacoche) {
+                sistemaDrops.soltar(
+                  { id: "huitlacoche", cantidad: 1 },
+                  nodo.posicionMundo.add(new Vector3(0.18, 0.1, 0.12))
+                );
+              }
             }
             busEventos.emitir({
               t: "cosecha",
@@ -1229,17 +1452,22 @@ async function crearEscena(): Promise<Scene> {
               variedad: resC.variedad.nombre,
               calidad: nodo.calidad
             });
+            const extraHuit = resC.tieneHuitlacoche
+              ? " ¡También cayó Huitlacoche gourmet 🍄 para el Fogón [F]!"
+              : "";
             espantapajaros?.decir(
-              `🌽 ¡Cayeron ${cantDrops} mazorcas de ${resC.variedad.nombre}! Acércate o haz clic sobre ellas para recogerlas y llévalas a la Troje [I].`
+              `🌽 ¡Cayeron ${cantDrops} mazorcas de ${resC.variedad.nombre}! Acércate para recogerlas y llévalas a la Troje [I] o al Fogón [F].${extraHuit}`
             );
             uiEdu?.mostrarToast(
               `${resC.mensaje} ¡Recoge las ${cantDrops} mazorcas y guárdalas en la Troje [I]!`
             );
             mazorcasCosechadasEstaSesion += cantDrops;
-            if (mazorcasCosechadasEstaSesion >= 3) {
+            if (!logroPrimeraCosechaMostrado && mazorcasCosechadasEstaSesion >= 3) {
+              logroPrimeraCosechaMostrado = true;
               estadoEdu.fase = "celebrar";
               estadoEdu.eloteCosechado = true;
             }
+            guardarPartidaActual();
           } else {
             uiEdu?.mostrarToast(resC.mensaje);
           }
@@ -1252,18 +1480,14 @@ async function crearEscena(): Promise<Scene> {
           const estaMuerta = nodo.sembrada && (nodo.plantaInterna.estado === "MUERTA" || nodo.estadoCrec.estaMuerta);
           const varCfg = VARIEDADES_MAIZ[nodo.variedad];
 
-          // 1. Cosechar a mano si el elote está maduro
-          if (
-            nodo.sembrada &&
-            !nodo.cosechada &&
-            (dia >= REGLAS_JUEGO.DIAS_COSECHA_MIN || (estaMuerta && nodo.plantaInterna.causaMuerte === "agotamiento"))
-          ) {
+          // 1. Cosechar a mano si la mazorca alcanzó R3–R6
+          if (surcoMilpa.estaListoParaCosecha(nodoId)) {
             ejecutarAccion("cosecha");
             espantapajaros?.decir(`🌽 ¡Cosechaste a mano el elote de ${varCfg.nombre} desprendiéndolo con cuidado!`);
             break;
           }
 
-          // 2. Retirar planta si ya fue cosechada o si murió
+          // 2. Retirar planta si ya fue cosechada o si murió sin mazorca aprovechable
           if (nodo.cosechada || estaMuerta) {
             ejecutarQuitarPlanta(nodoId);
             break;
@@ -1279,8 +1503,14 @@ async function crearEscena(): Promise<Scene> {
             break;
           }
 
-          // 4. Polinización manual sacudiendo la espiga con las manos
-          if (nodo.sembrada && dia >= 45 && dia <= 110 && nodo.polinizacion < 0.95) {
+          // 4. Polinización manual sacudiendo la espiga con las manos en VT–R2
+          const etapaMano = surcoMilpa.obtenerEtapaNodo(nodoId);
+          if (
+            nodo.sembrada &&
+            etapaMano >= Etapa.VT &&
+            etapaMano <= Etapa.R2 &&
+            nodo.polinizacion < 0.95
+          ) {
             polinizacionSistema?.polinizarManual(nodoId);
             espantapajaros?.decir(`🌼 ¡Sacudiste la espiga con tus manos! El polen fertiliza los estigmas.`);
             break;
@@ -1294,11 +1524,11 @@ async function crearEscena(): Promise<Scene> {
 
           // 6. Aflojar / acondicionar el montículo de tierra con las manos
           if (!nodo.sembrada && nodo.tierraArada < 100) {
-            const resA = surcoMilpa.arar(nodoId, 0.5);
+            surcoMilpa.arar(nodoId, 0.5);
             audioSintetizador?.ararTierra(nodo.posicionMundo);
             uiEdu?.mostrarToast(`🤲 Araste y moldeaste el montículo con tus manos (${Math.round(nodo.tierraArada)}%)`);
             if (nodo.tierraArada >= 100) {
-              espantapajaros?.decir(`¡Tierra bien mullida con tus manos! Ahora vuelve a hacer clic con las manos para depositar la semilla.`);
+              espantapajaros?.decir(`¡Tierra bien mullida con tus manos! Ahora equipa semillas [3-6] o vuelve a hacer clic.`);
             }
             break;
           }
@@ -1306,24 +1536,22 @@ async function crearEscena(): Promise<Scene> {
           // 7. Inspección táctil del suelo y estado de la planta con las manos
           audioSintetizador?.semillas(nodo.posicionMundo);
           const estadoAgua =
-            nodo.humedadVWC < 20
-              ? "Seco 🏜️ (necesita agua [7])"
-              : nodo.humedadVWC > 35
-              ? "Muy húmedo 💧"
+            nodo.humedadVWC < varCfg.vwcOptimoMin
+              ? "Seco 🏜️ (riega con [7])"
+              : nodo.humedadVWC > varCfg.vwcOptimoMax
+              ? "Muy húmedo 💧 (drena con [2])"
               : "Humedad óptima 🌿";
-          const descTactil = `✋ Palpaste la Estación #${nodoId + 1} (${varCfg.nombre}): Suelo ${estadoAgua} (${Math.round(nodo.humedadVWC)}% VWC), Nutrientes ${Math.round(nodo.nutrientesNPK)}% NPK, Día ${Math.floor(dia)}.`;
+          const descTactil = `✋ Estación #${nodoId + 1} (${varCfg.nombre}): ${estadoAgua} (${Math.round(nodo.humedadVWC)}% VWC), N:${Math.round(nodo.nSuelo)} P:${Math.round(nodo.pSuelo)} K:${Math.round(nodo.kSuelo)} · [L] Ficha Clínica.`;
           uiEdu?.mostrarToast(descTactil);
           espantapajaros?.decir(
-            `Tocas el suelo y sientes la tierra: ${Math.round(nodo.humedadVWC)}% de humedad. ${
-              nodo.humedadVWC < 20 ? "¡Le hace falta riego!" : "¡La planta está vigorosa!"
+            `Palpas la tierra: ${Math.round(nodo.humedadVWC)}% VWC. ${
+              nodo.humedadVWC < varCfg.vwcOptimoMin ? "¡Necesita riego [7]!" : "¡La planta avanza bien! Abre [L] para ver sus raíces."
             }`
           );
         }
         break;
     }
 
-    if (interaccion6DoF) interaccion6DoF.herramientaActiva = herramienta;
-    controladorJugador?.equipar(herramienta);
     sincronizarNodoConUI();
   }
 
@@ -1344,17 +1572,17 @@ async function crearEscena(): Promise<Scene> {
           prioridad: 3,
           topico: `muerta_nodo_${n.id}_${p.causaMuerte}`,
           titulo: "💀 Don Elote advierte planta seca/muerta:",
-          texto: `El ${varCfg.nombre} en Estación #${n.id + 1} murió por ${p.causaMuerte || "estrés climático"}. Usa la Azada [2] para limpiar y volver a sembrar.`,
+          texto: `El ${varCfg.nombre} en Estación #${n.id + 1} murió por ${p.causaMuerte || "estrés climático"}. Usa [Q] o Azada [2] para limpiar.`,
           posObjetivo: n.posicionMundo
         });
         break;
       }
-      if ((p.secado ?? 0) > 0.35 && dia < REGLAS_JUEGO.DIAS_COSECHA_MIN) {
+      if ((p.secado ?? 0) > 0.35 && !surcoMilpa.estaListoParaCosecha(n.id)) {
         espantapajaros.encolarPista({
           prioridad: 2,
           topico: `secando_nodo_${n.id}`,
           titulo: "🌾 ¡Cuidado, se está secando!",
-          texto: `La Estación #${n.id + 1} (${varCfg.nombre}) se está empezando a secar (${Math.round(n.humedadVWC)}% VWC). ¡Riégala con [7] o ajusta el clima!`,
+          texto: `La Estación #${n.id + 1} (${varCfg.nombre}) se está secando (${Math.round(n.humedadVWC)}% VWC). ¡Riégala con [7] o ajusta el clima!`,
           posObjetivo: n.posicionMundo
         });
         break;
@@ -1364,27 +1592,33 @@ async function crearEscena(): Promise<Scene> {
           prioridad: 1,
           topico: `maleza_nodo_${n.id}`,
           titulo: "🌿 Don Elote señala maleza:",
-          texto: `¡Mira la Estación #${n.id + 1}! Creció maleza y quelites. Arráncalos con [X] o siembra calabaza [N].`,
+          texto: `¡Mira la Estación #${n.id + 1}! Crecieron quelites y maleza. Arráncalos con [X] o siembra calabaza [N].`,
           posObjetivo: n.posicionMundo
         });
         break;
       }
-      if (dia >= 55 && dia <= 95 && n.polinizacion < 0.5) {
+      const etapaPista = surcoMilpa.obtenerEtapaNodo(n.id);
+      if (
+        etapaPista >= Etapa.VT &&
+        etapaPista <= Etapa.R2 &&
+        n.polinizacion < 0.65
+      ) {
         espantapajaros.encolarPista({
           prioridad: 2,
           topico: `polen_nodo_${n.id}`,
           titulo: "🌼 Don Elote aconseja polinizar:",
-          texto: `La Estación #${n.id + 1} está espigando. Sacude la espiga con [P] para llenar todos los granos del elote.`,
+          texto: `La Estación #${n.id + 1} está en floración (VT–R2). Sacude la espiga con [P] para llenar todos los granos del elote.`,
           posObjetivo: n.posicionMundo
         });
         break;
       }
-      if (dia >= REGLAS_JUEGO.DIAS_COSECHA_MIN) {
+      if (surcoMilpa.estaListoParaCosecha(n.id)) {
+        const tipo = surcoMilpa.obtenerTipoCosecha(n.id);
         espantapajaros.encolarPista({
           prioridad: 2,
-          topico: `cosecha_nodo_${n.id}`,
-          titulo: "🌽 ¡Mazorca lista para cosechar!",
-          texto: `La Estación #${n.id + 1} llegó a madurez (${Math.floor(dia)} días). ¡Coséchala con [9]!`,
+          topico: `cosecha_nodo_${n.id}_${tipo}`,
+          titulo: tipo === "grano_seco" ? "🌾 ¡Grano Seco R6 listo!" : "🌽 ¡Elote Tierno R3 listo!",
+          texto: `La Estación #${n.id + 1} llegó a ${nombreEtapa(etapaPista)} (Día ${Math.floor(dia)}). ¡Coséchala con [9]!`,
           posObjetivo: n.posicionMundo
         });
         break;
@@ -1413,18 +1647,14 @@ async function crearEscena(): Promise<Scene> {
       uiEdu?.actualizarUI();
     },
     onAvanzarSemana: () => {
-      ejecutarAccion("sol");
+      avanzarDiasConAutopausa(5);
     },
     onReiniciar: () => {
-      estadoEdu.reiniciar();
-      surcoMilpa?.reiniciarSurco();
-      surcoMilpa?.nodos.forEach((n) => faunaMilpa?.desactivarAgentesEnNodo(n.id));
-      restablecerInventarioInicial();
-      hotbarPixel?.actualizarVisual();
-      malezaSistema?.actualizarThinInstances();
-      triadaViva?.actualizarVisuales();
-      sincronizarNodoConUI();
+      limpiarEstadoMundo(false);
       uiEdu?.mostrarToast("🌱 ¡Parcela reiniciada! Semillas e instrumentos restaurados.");
+    },
+    onContinuarTrasLogro: () => {
+      sincronizarNodoConUI();
     },
     onToggleModoCientifico: () => {
       const vis = !paneles?.refs.panelConsolaMesh.isEnabled();
@@ -1478,7 +1708,12 @@ async function crearEscena(): Promise<Scene> {
     },
     onAbrirAlmacen: () => {
       controladorJugador?.liberarPuntero();
-      almacenMazorcas?.alternarModal();
+      modalCofreTroje?.alternar();
+    },
+    onAbrirFichaCultivo: () => {
+      controladorJugador?.liberarPuntero();
+      const nodoActivo = surcoMilpa?.nodos[surcoMilpa.nodoSeleccionadoId];
+      if (nodoActivo) fichaCultivo?.alternar(nodoActivo, clima);
     },
     onToggleClima: () => {
       controladorJugador?.liberarPuntero();
@@ -1508,6 +1743,39 @@ async function crearEscena(): Promise<Scene> {
   };
   (window as any).modalControles = modalControles;
 
+  function aplicarConfigMundo(): void {
+    faunaMilpa?.configurarMundo(dificultadMundo, semillaMundoStr);
+    directorEventos?.configurarMundo(dificultadMundo, semillaMundoStr);
+  }
+
+  function limpiarEstadoMundo(reiniciarProgresoGlobal = false): void {
+    mazorcasCosechadasEstaSesion = 0;
+    logroPrimeraCosechaMostrado = false;
+    climaAntesEvento = null;
+    estadoEdu.reiniciar();
+    hotbarPixel?.actualizarEstadoCrecimiento(false);
+    surcoMilpa?.reiniciarSurco();
+    faunaMilpa?.reiniciar();
+    directorEventos?.reiniciar();
+    misionesSistema?.reiniciar();
+    fogonCocina?.reiniciar();
+    carritoAgricola?.canasta?.reiniciar();
+    inventarioTroje?.limpiar();
+    almacenMazorcas?.reiniciarAlmacen();
+    sistemaDrops?.limpiar();
+    restablecerInventarioInicial();
+    if (reiniciarProgresoGlobal) {
+      bancoSemillas?.reiniciar();
+      codiceMaiz?.reiniciar();
+    }
+    malezaSistema?.actualizarThinInstances();
+    triadaViva?.actualizarVisuales();
+    hotbarPixel?.actualizarVisual();
+    actualizarContadoresHUDMazorcas();
+    sincronizarNodoConUI();
+    aplicarConfigMundo();
+  }
+
   function serializarPartidaActual(): PartidaGuardada {
     const diaMaximo = surcoMilpa
       ? Math.max(...surcoMilpa.nodos.map((n) => n.diasCultivo || 0), 0)
@@ -1521,19 +1789,34 @@ async function crearEscena(): Promise<Scene> {
       actualizadoEn: Date.now(),
       diaMaximo,
       clima: { ...clima },
+      cicloSolarAuto,
       nodos: surcoMilpa ? surcoMilpa.exportarSnapshot() : [],
       slotsJugador: inventarioJugador ? inventarioJugador.serializar() : [],
       slotsTroje: inventarioTroje ? inventarioTroje.serializar() : [],
       almacenPorVariedad: almacenMazorcas
         ? { ...almacenMazorcas.almacenadoPorVariedad }
-        : { chalqueno: 0, azul: 0, rojo: 0, palomero: 0 }
+        : { chalqueno: 0, azul: 0, rojo: 0, palomero: 0 },
+      misiones: misionesSistema ? misionesSistema.exportarSnapshot() : undefined,
+      fogonPlatos: fogonCocina ? fogonCocina.exportarPlatos() : [],
+      canastaIngredientes: carritoAgricola?.canasta
+        ? {
+            quelites: carritoAgricola.canasta.quelites,
+            frijol: carritoAgricola.canasta.frijol,
+            calabaza: carritoAgricola.canasta.calabaza,
+            huitlacoche: carritoAgricola.canasta.huitlacoche
+          }
+        : undefined,
+      directorEventos: directorEventos ? directorEventos.exportarSnapshot() : undefined,
+      codiceIds: codiceMaiz ? codiceMaiz.exportarDesbloqueadas() : [],
+      bancoLotes: bancoSemillas ? bancoSemillas.exportarSnapshot().lotes : undefined,
+      bancoLoteActivo: bancoSemillas ? bancoSemillas.exportarSnapshot().loteActivoIndex : undefined,
+      logroPrimeraCosecha: logroPrimeraCosechaMostrado
     };
   }
 
   function guardarPartidaActual(): boolean {
     try {
-      guardarPartida(serializarPartidaActual());
-      return true;
+      return guardarPartida(serializarPartidaActual());
     } catch {
       return false;
     }
@@ -1566,13 +1849,27 @@ async function crearEscena(): Promise<Scene> {
     dificultadMundo = p.dificultad || "normal";
     presetClimaMundo = p.presetClima || "templado";
     semillaMundoStr = p.semillaMundo || "CHALCO-2026";
+    climaAntesEvento = null;
 
     Object.assign(clima, p.clima || climaDesdePreset(presetClimaMundo));
+    cicloSolarAuto = p.cicloSolarAuto !== undefined ? p.cicloSolarAuto : true;
+    panelClima?.actualizarEstadoCicloSolar(cicloSolarAuto);
+    paneles?.actualizarEstadoCicloSolar(cicloSolarAuto);
     metricas = calcularMetricas(clima);
     ambiente?.aplicarClima(clima, metricas);
     panelClima?.actualizarValoresUI();
 
-    surcoMilpa?.nodos.forEach((n) => faunaMilpa?.desactivarAgentesEnNodo(n.id));
+    faunaMilpa?.reiniciar();
+    sistemaDrops?.limpiar();
+    carritoAgricola?.canasta?.reiniciar();
+    if (p.canastaIngredientes && carritoAgricola?.canasta) {
+      carritoAgricola.canasta.quelites = p.canastaIngredientes.quelites || 0;
+      carritoAgricola.canasta.frijol = p.canastaIngredientes.frijol || 0;
+      carritoAgricola.canasta.calabaza = p.canastaIngredientes.calabaza || 0;
+      carritoAgricola.canasta.huitlacoche = p.canastaIngredientes.huitlacoche || 0;
+      carritoAgricola.canasta.actualizarBadge();
+    }
+
     if (Array.isArray(p.nodos) && p.nodos.length > 0) {
       surcoMilpa?.restaurarSnapshot(p.nodos, clima, metricas);
     } else {
@@ -1585,11 +1882,46 @@ async function crearEscena(): Promise<Scene> {
     }
     if (Array.isArray(p.slotsTroje)) {
       inventarioTroje?.deserializar(p.slotsTroje);
+    } else {
+      inventarioTroje?.limpiar();
     }
 
+    // Reconstruir mazorcas visuales en canasta desde el inventario del jugador (fuente única)
+    if (inventarioJugador && carritoAgricola?.canasta) {
+      for (const s of inventarioJugador.slots) {
+        if (s && s.id === "mazorca" && s.cantidad > 0) {
+          const tipoVar = tipoPorNombreVariedad(s.meta?.variedad);
+          for (let i = 0; i < s.cantidad; i++) {
+            carritoAgricola.canasta.depositarMazorca(
+              VARIEDADES_MAIZ[tipoVar],
+              undefined,
+              s.meta?.calidad ?? 0.9
+            );
+          }
+        }
+      }
+    }
+
+    if (p.misiones) misionesSistema?.restaurarSnapshot(p.misiones);
+    else misionesSistema?.reiniciar();
+
+    if (Array.isArray(p.fogonPlatos)) fogonCocina?.restaurarPlatos(p.fogonPlatos);
+    else fogonCocina?.reiniciar();
+
+    if (p.directorEventos) directorEventos?.restaurarSnapshot(p.directorEventos);
+    else directorEventos?.reiniciar();
+
+    if (Array.isArray(p.codiceIds)) codiceMaiz?.restaurarDesbloqueadas(p.codiceIds);
+    if (Array.isArray(p.bancoLotes) && p.bancoLotes.length > 0) {
+      bancoSemillas?.restaurarSnapshot(p.bancoLotes, p.bancoLoteActivo ?? 0);
+    }
+    logroPrimeraCosechaMostrado = !!p.logroPrimeraCosecha;
+
+    aplicarConfigMundo();
     malezaSistema?.actualizarThinInstances();
     triadaViva?.actualizarVisuales();
     hotbarPixel?.actualizarVisual();
+    actualizarContadoresHUDMazorcas();
     sincronizarNodoConUI();
     prepararEntradaAlSurco();
     uiEdu?.mostrarToast(`🌍 Mundo cargado: ${nombreMundoActivo} (Día ${Math.floor(p.diaMaximo || 0)})`);
@@ -1604,18 +1936,15 @@ async function crearEscena(): Promise<Scene> {
       semillaMundoStr = opts.semillaMundo;
 
       Object.assign(clima, climaDesdePreset(opts.presetClima));
+      cicloSolarAuto = true;
+      panelClima?.actualizarEstadoCicloSolar(true);
+      paneles?.actualizarEstadoCicloSolar(true);
       metricas = calcularMetricas(clima);
       ambiente?.aplicarClima(clima, metricas);
       panelClima?.actualizarValoresUI();
 
-      estadoEdu.reiniciar();
-      surcoMilpa?.reiniciarSurco();
-      surcoMilpa?.nodos.forEach((n) => faunaMilpa?.desactivarAgentesEnNodo(n.id));
-      restablecerInventarioInicial();
-      malezaSistema?.actualizarThinInstances();
-      triadaViva?.actualizarVisuales();
+      limpiarEstadoMundo(false);
       hotbarPixel?.seleccionarSlot(1);
-      sincronizarNodoConUI();
       guardarPartidaActual();
       prepararEntradaAlSurco();
       uiEdu?.mostrarToast(`🌱 ¡Nueva partida creada: "${nombreMundoActivo}" (${opts.dificultad})!`);
@@ -1656,14 +1985,7 @@ async function crearEscena(): Promise<Scene> {
       ajustesSistema?.toggleModal();
     },
     onReiniciar: () => {
-      estadoEdu.reiniciar();
-      surcoMilpa?.reiniciarSurco();
-      surcoMilpa?.nodos.forEach((n) => faunaMilpa?.desactivarAgentesEnNodo(n.id));
-      restablecerInventarioInicial();
-      hotbarPixel?.actualizarVisual();
-      malezaSistema?.actualizarThinInstances();
-      triadaViva?.actualizarVisuales();
-      sincronizarNodoConUI();
+      limpiarEstadoMundo(false);
       uiEdu?.mostrarToast("🌱 ¡Parcela reiniciada!");
     },
     onGuardarYSalir: () => {
@@ -1687,9 +2009,10 @@ async function crearEscena(): Promise<Scene> {
     controladorJugador.alternarModo();
   }
 
-  // Inicializar texto de misión activa e inventario en UI
+  // Inicializar texto de misión activa, dificultad/semilla e inventario en UI
+  aplicarConfigMundo();
   if (misionesSistema.onActualizarUI) misionesSistema.onActualizarUI();
-  if (almacenMazorcas.onCambioInventario) almacenMazorcas.onCambioInventario();
+  actualizarContadoresHUDMazorcas();
 
   // L. Bucle de renderizado y simulación en tiempo real (Zero-GC en el bucle crítico)
   let tiempoAcumulado = 0;
@@ -1704,6 +2027,7 @@ async function crearEscena(): Promise<Scene> {
 
     const menuActivo = !!menuPrincipal?.estaAbierto();
     const juegoPausado = menuActivo || !!menuPausa?.estaAbierto();
+    if (ajustesSistema) ajustesSistema.pausado = juegoPausado;
 
     fpsTimer += dt;
     frameCount++;
@@ -1721,18 +2045,22 @@ async function crearEscena(): Promise<Scene> {
     // 1. Crecimiento dinámico continuo si está activo
     if (!juegoPausado && estadoEdu.reproduciendoCrecimiento && surcoMilpa) {
       const dtDias = dt * 3.5;
-      surcoMilpa.avanzarSimulacion(dtDias, clima, metricas);
+      surcoMilpa.avanzarSimulacion(
+        dtDias,
+        clima,
+        metricas,
+        directorEventos?.obtenerSeveridadActiva(),
+        obtenerFactorDificultadMaleza()
+      );
       if (timerThinSync > 0.35) {
         timerThinSync = 0;
         malezaSistema?.actualizarThinInstances();
         triadaViva?.actualizarVisuales();
         sincronizarNodoConUI();
-        const nodo = surcoMilpa.nodos[surcoMilpa.nodoSeleccionadoId];
-        if (nodo) {
-          const dia = Math.floor(nodo.diasCultivo);
-          misionesSistema?.actualizarCalendarioRitual(dia);
-          directorEventos?.evaluarDiaSimulado(dia);
-        }
+        const diaMax = Math.max(...surcoMilpa.nodos.map((n) => n.diasCultivo || 0), 0);
+        const dia = Math.floor(diaMax);
+        misionesSistema?.actualizarCalendarioRitual(dia);
+        directorEventos?.evaluarDiaSimulado(dia);
       }
     }
 
@@ -1747,7 +2075,13 @@ async function crearEscena(): Promise<Scene> {
       metricas = calcularMetricas(clima);
 
       ambiente?.aplicarClima(clima, metricas);
-      surcoMilpa?.avanzarSimulacion(dtDias, clima, metricas);
+      surcoMilpa?.avanzarSimulacion(
+        dtDias,
+        clima,
+        metricas,
+        directorEventos?.obtenerSeveridadActiva(),
+        obtenerFactorDificultadMaleza()
+      );
       malezaSistema?.actualizarThinInstances();
       triadaViva?.actualizarVisuales();
       paneles?.actualizarConsola(estadoCrecimiento, clima);
@@ -1768,7 +2102,16 @@ async function crearEscena(): Promise<Scene> {
     // 3. Animación de nubes, molino, animales de granja y oscilación biomecánica por viento
     ambiente?.animar(dt, clima.viento);
     surcoMilpa?.animarViento(tiempoAcumulado, clima.viento);
-    carritoAgricola?.actualizar(dt);
+    if (carritoAgricola) {
+      carritoAgricola.actualizar(dt);
+      actualizarCaja(
+        "carritoAgricola",
+        carritoAgricola.root.position.x,
+        carritoAgricola.root.position.z,
+        1.24,
+        0.62
+      );
+    }
 
     // 4. Posición de la cámara activa (XR o FPS/Orbital)
     const enXR =
@@ -1806,11 +2149,12 @@ async function crearEscena(): Promise<Scene> {
     }
 
     // 6. Actualización de Fauna, Drops de Mazorcas, Eventos Climáticos, Contornos LOD (H10) y Paisaje Sonoro (M12)
-    if (interaccion6DoF && controladorJugador) {
-      interaccion6DoF.modoFPSActivo = controladorJugador.modo === "fps";
+    if (controladorJugador) {
+      const esFPS = controladorJugador.modo === "fps";
+      if (interaccion6DoF) interaccion6DoF.modoFPSActivo = esFPS;
+      if (locomocionVR) locomocionVR.modoFPSActivo = esFPS;
     }
     if (!juegoPausado) {
-      almacenMazorcas?.actualizar(dt, posJugador);
       sistemaDrops?.actualizar(dt);
       faunaMilpa?.actualizar(dt, interaccion6DoF?.manoIzq, interaccion6DoF?.manoDer);
       directorEventos?.actualizar(dt);
@@ -1825,7 +2169,7 @@ async function crearEscena(): Promise<Scene> {
 
     // 7. Espantapájaros guía, mesa de clima y jugador en primera persona
     espantapajaros?.animar(tiempoAcumulado, clima.viento, posJugador);
-    mesaClimaPrejuego?.animar(tiempoAcumulado);
+    mesaClimaPrejuego?.animar(tiempoAcumulado, dt);
     dispensadorSemillas?.animar(tiempoAcumulado);
     if (!enXR) {
       controladorXbox?.actualizar(dt);
@@ -1854,7 +2198,7 @@ async function crearEscena(): Promise<Scene> {
 
   // M. Estado inicial (sincronizar Hotbar -> Viewmodel -> EstadoEducativo en Azada [2])
   ambiente.aplicarClima(clima, metricas);
-  ambiente.actualizarHumedadVisual(estadoEdu.humedadSuelo);
+  ambiente.actualizarHumedadVisual(Math.min(100, Math.max(0, (clima.humedadSuelo / 55) * 100)));
   ambiente.estiloPatrix.unificarMaterialesRestantes();
   ambiente.estiloPatrix.vincularCamara(camera);
   ambiente.estiloPatrix.vincularCamara(controladorJugador.camaraFPS);
@@ -1869,20 +2213,28 @@ async function crearEscena(): Promise<Scene> {
     cinturonVR?.seleccionar(h);
     uiEdu?.actualizarUI();
 
-    // En modo Orbital o para el botón de Sol (+15 días), también ejecuta la acción directamente
-    if (controladorJugador?.modo === "orbital" || h === "sol") {
-      ejecutarAccion(h);
+    // Únicamente el amuleto Sol (+15d) dispara al seleccionarse desde la barra; las demás herramientas se equipan sin auto-dispararse
+    if (h === "sol") {
+      avanzarDiasConAutopausa(15);
     }
   }
 
   hotbarPixel?.seleccionarSlot(1);
 
-  // N. Atajos de teclado completos estilo Minecraft (Hotbar 1-9 + Almacén [I] + Ecosistema v4.0)
+  // N. Atajos de teclado completos estilo Minecraft (Hotbar 1-9 + Almacén [I] + Ficha [L] + Ecosistema v4.0)
   window.addEventListener("keydown", async (ev) => {
     const tag = (ev.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
 
     if (ev.code === "Escape") {
+      if (uiEdu?.estaTrofeoAbierto()) {
+        uiEdu.cerrarTrofeo();
+        return;
+      }
+      if (fichaCultivo?.estaAbierto()) {
+        fichaCultivo.cerrar();
+        return;
+      }
       if (modalControles?.estaAbierto()) {
         modalControles.ocultar();
         return;
@@ -1927,6 +2279,25 @@ async function crearEscena(): Promise<Scene> {
       return;
     }
 
+    const kLow = ev.key.toLowerCase();
+
+    // Si hay un modal abierto, solo permitir cerrarlo con su propio atajo (o [Esc] arriba); bloquear atajos de parcela
+    if (controladorJugador?.hayModalAbierto()) {
+      if (kLow === "i" && modalCofreTroje?.estaAbierto) modalCofreTroje.cerrar();
+      else if (kLow === "l" && fichaCultivo?.estaAbierto()) fichaCultivo.cerrar();
+      else if (kLow === "u" && dispensadorSemillas?.estaAbierto()) dispensadorSemillas.cerrar();
+      else if (kLow === "c" && document.querySelector(".panel-clima-card.visible")) panelClima?.toggle(false);
+      else if (kLow === "f" && document.getElementById("fogonCocinaModal")?.style.display !== "none") fogonCocina?.alternarModal();
+      else if (kLow === "m" && document.getElementById("bancoSemillasModal")?.style.display !== "none") bancoSemillas?.alternarModal();
+      else if (kLow === "k" && document.getElementById("codiceMaizModal")?.style.display !== "none") codiceMaiz?.alternarModal();
+      else if (kLow === "o" && document.getElementById("modalAjustesVR")?.style.display !== "none") ajustesSistema?.toggleModal();
+      else if ((ev.key === "?" || ev.key === "/" || ev.code === "F1") && modalControles?.estaAbierto()) {
+        ev.preventDefault();
+        modalControles.ocultar();
+      }
+      return;
+    }
+
     if (ev.code === "Space") {
       ev.preventDefault();
       if (controladorJugador?.modo !== "fps") {
@@ -1934,7 +2305,21 @@ async function crearEscena(): Promise<Scene> {
         hotbarPixel?.actualizarEstadoCrecimiento(estadoEdu.reproduciendoCrecimiento);
         uiEdu?.actualizarUI();
       }
-    } else if (ev.key === "q" || ev.key === "Q" || ev.code === "Delete" || ev.code === "Backspace") {
+    } else if (kLow === "j") {
+      const algunSembrado = surcoMilpa?.nodos.some((n) => n.sembrada) ?? false;
+      if (!algunSembrado && !estadoEdu.semillaSembrada) {
+        uiEdu?.mostrarToast("¡Primero siembra una semilla para iniciar el crecimiento continuo!");
+        return;
+      }
+      estadoEdu.reproduciendoCrecimiento = !estadoEdu.reproduciendoCrecimiento;
+      hotbarPixel?.actualizarEstadoCrecimiento(estadoEdu.reproduciendoCrecimiento);
+      uiEdu?.actualizarUI();
+      uiEdu?.mostrarToast(
+        estadoEdu.reproduciendoCrecimiento
+          ? "▶ Crecimiento continuo activado ([J] para pausar)"
+          : "⏸ Crecimiento continuo en pausa"
+      );
+    } else if (kLow === "q" || ev.code === "Delete" || ev.code === "Backspace") {
       ev.preventDefault();
       ejecutarQuitarPlanta();
     } else if (ev.key >= "1" && ev.key <= "9") {
@@ -1942,50 +2327,52 @@ async function crearEscena(): Promise<Scene> {
       hotbarPixel?.seleccionarSlot(idx);
     } else if (ev.key === "0" || ev.key === "`") {
       hotbarPixel?.seleccionarSlot(0);
-    } else if (ev.key === "i" || ev.key === "I") {
+    } else if (kLow === "i") {
       controladorJugador?.liberarPuntero();
       modalCofreTroje?.alternar();
-    } else if (ev.key === "u" || ev.key === "U") {
+    } else if (kLow === "l") {
+      controladorJugador?.liberarPuntero();
+      const nodoSel = surcoMilpa?.nodos[surcoMilpa.nodoSeleccionadoId];
+      if (nodoSel) fichaCultivo?.alternar(nodoSel, clima);
+    } else if (kLow === "u") {
       controladorJugador?.liberarPuntero();
       if (dispensadorSemillas?.estaAbierto()) dispensadorSemillas.cerrar();
       else dispensadorSemillas?.abrir();
-    } else if (ev.key === "y" || ev.key === "Y") {
-      ejecutarAccion("sol");
-    } else if (ev.key === "x" || ev.key === "X") {
+    } else if (kLow === "y") {
+      avanzarDiasConAutopausa(15);
+    } else if (kLow === "x") {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
       malezaSistema?.deshierbarNodo(id, 0.6);
       faunaMilpa?.limpiarPlagasEnNodo(id);
-    } else if (ev.key === "p" || ev.key === "P") {
+    } else if (kLow === "p") {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
       polinizacionSistema?.polinizarManual(id);
-    } else if (ev.key === "b" || ev.key === "B") {
+    } else if (kLow === "b") {
       ejecutarAccion("frijol");
-    } else if (ev.key === "n" || ev.key === "N") {
+    } else if (kLow === "n") {
       ejecutarAccion("calabaza");
-    } else if (ev.key === "t" || ev.key === "T") {
+    } else if (kLow === "t") {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
       const res = surcoMilpa?.colocarTutor(id);
       if (res) uiEdu?.mostrarToast(res.mensaje);
-    } else if (ev.key === "g" || ev.key === "G") {
+    } else if (kLow === "g") {
       const id = surcoMilpa ? surcoMilpa.nodoSeleccionadoId : 0;
       const res = surcoMilpa?.colocarProteccion(id);
       if (res) uiEdu?.mostrarToast(res.mensaje);
-    } else if (ev.key === "f" || ev.key === "F") {
+    } else if (kLow === "f") {
       controladorJugador?.liberarPuntero();
       fogonCocina?.alternarModal();
-    } else if (ev.key === "m" || ev.key === "M") {
+    } else if (kLow === "m") {
       controladorJugador?.liberarPuntero();
       bancoSemillas?.alternarModal();
-    } else if (ev.key === "k" || ev.key === "K") {
+    } else if (kLow === "k") {
       controladorJugador?.liberarPuntero();
       codiceMaiz?.alternarModal();
-    } else if (ev.key === "o" || ev.key === "O") {
+    } else if (kLow === "o") {
       controladorJugador?.liberarPuntero();
       ajustesSistema?.toggleModal();
-    } else if (ev.key === "e" || ev.key === "E") {
-      if (modalCofreTroje?.estaAbierto) {
-        modalCofreTroje.cerrar();
-      } else if (controladorJugador?.tipoObjetivoEnfocado === "almacen" || controladorJugador?.tipoObjetivoEnfocado === "canasta") {
+    } else if (kLow === "e") {
+      if (controladorJugador?.tipoObjetivoEnfocado === "almacen" || controladorJugador?.tipoObjetivoEnfocado === "canasta") {
         controladorJugador.liberarPuntero();
         modalCofreTroje?.alternar();
       } else if (controladorJugador?.tipoObjetivoEnfocado === "dispensador") {
@@ -1999,6 +2386,9 @@ async function crearEscena(): Promise<Scene> {
       } else if (controladorJugador?.tipoObjetivoEnfocado === "codice") {
         controladorJugador.liberarPuntero();
         codiceMaiz?.alternarModal();
+      } else if (controladorJugador?.tipoObjetivoEnfocado === "mesa_clima") {
+        const resClima = mesaClimaPrejuego?.interactuarConMalla(controladorJugador.meshEnfocadoNombre);
+        if (resClima?.mensaje) uiEdu?.mostrarToast(resClima.mensaje);
       } else if (
         controladorJugador?.tipoObjetivoEnfocado === "nodo" ||
         controladorJugador?.tipoObjetivoEnfocado === "drop_mazorca" ||
@@ -2010,7 +2400,7 @@ async function crearEscena(): Promise<Scene> {
       } else {
         espantapajaros?.compartirSiguienteDato();
       }
-    } else if (ev.key === "v" || ev.key === "V") {
+    } else if (kLow === "v") {
       controladorJugador?.alternarModo();
     } else if (ev.key === "Tab") {
       ev.preventDefault();
@@ -2023,7 +2413,7 @@ async function crearEscena(): Promise<Scene> {
         uiEdu?.mostrarToast(`👉 Estación ${nextId + 1}: ${varCfg.nombre}`);
         espantapajaros?.decir(`Cambiamos a la estación ${nextId + 1}: ${varCfg.nombre}.`);
       }
-    } else if (ev.key === "l" || ev.key === "L") {
+    } else if (kLow === "z") {
       if (locomocionVR) {
         if (locomocionVR.enLobby) {
           locomocionVR.teletransportarANodo(0);
@@ -2039,17 +2429,17 @@ async function crearEscena(): Promise<Scene> {
         locomocionVR.teletransportarANodo(0);
         uiEdu?.mostrarToast("🌱 ¡Entraste al surco de siembra!");
       }
-    } else if (ev.key === "c" || ev.key === "C") {
+    } else if (kLow === "c") {
       controladorJugador?.liberarPuntero();
       panelClima?.toggle();
-    } else if (ev.key === "h" || ev.key === "H") {
+    } else if (kLow === "h") {
       const vis = !paneles?.refs.panelConsolaMesh.isEnabled();
       paneles?.setVisible(vis);
     } else if (ev.key === "?" || ev.key === "/" || ev.code === "F1") {
       ev.preventDefault();
       controladorJugador?.liberarPuntero();
       modalControles?.alternar();
-    } else if (ev.key === "r" || ev.key === "R") {
+    } else if (kLow === "r") {
       if (camaraPrincipal) {
         camaraPrincipal.useAutoRotationBehavior = !camaraPrincipal.useAutoRotationBehavior;
       }

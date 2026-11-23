@@ -7,7 +7,7 @@
  *    con botones de depósito rápido, ordenamiento, y cursor flotante con semántica de apilado.
  */
 
-import { Inventario, ItemStack, DEFS, tierCalidad } from "../inventario/inventario";
+import { Inventario, ItemStack, DEFS, tierCalidad, mismaClase } from "../inventario/inventario";
 import { CursorInventario, herramientaDeSlot } from "../inventario/cursor";
 import { generarDataUrlIcono } from "./iconos_pixel";
 import { HerramientaTipo } from "../educativo/estado_educativo";
@@ -22,7 +22,8 @@ export class PanelCuadricula {
     public readonly cursor: CursorInventario,
     public readonly cols = 9,
     public readonly startIndex = 0,
-    public readonly count = inv.tamano
+    public readonly count = inv.tamano,
+    public readonly soloSeleccion = false
   ) {
     this.el = document.createElement("div");
     this.el.className = "mc-grid-container";
@@ -96,7 +97,13 @@ export class PanelCuadricula {
         if (stack.meta?.variedad) {
           const t = tierCalidad(stack.meta.calidad);
           const tLabel = t === 2 ? "⭐⭐ Calidad Extra" : t === 1 ? "⭐ Buena Calidad" : "Común";
-          titulo += ` (${stack.meta.variedad} · ${tLabel})`;
+          const madLabel =
+            stack.meta.madurez === "elote"
+              ? " · Elote Tierno R3"
+              : stack.meta.madurez === "grano_seco"
+              ? " · Grano Seco R6"
+              : "";
+          titulo += ` (${stack.meta.variedad}${madLabel} · ${tLabel})`;
         }
         if (def.descripcion) {
           titulo += `\n${def.descripcion}`;
@@ -107,16 +114,17 @@ export class PanelCuadricula {
       // Eventos de ratón
       slotEl.addEventListener("mousedown", (e) => {
         e.preventDefault();
-        if (e.button === 0) {
-          // Clic izquierdo
-          if (e.shiftKey && this.onShift) {
-            this.onShift(slotIndex);
-          } else {
-            this.cursor.clicIzq(this.inv, slotIndex);
+        // En la hotbar fija (soloSeleccion = true), clic únicamente equipa la ranura sin extraer el ítem al cursor invisible
+        if (!this.soloSeleccion) {
+          if (e.button === 0) {
+            if (e.shiftKey && this.onShift) {
+              this.onShift(slotIndex);
+            } else {
+              this.cursor.clicIzq(this.inv, slotIndex);
+            }
+          } else if (e.button === 2) {
+            this.cursor.clicDer(this.inv, slotIndex);
           }
-        } else if (e.button === 2) {
-          // Clic derecho
-          this.cursor.clicDer(this.inv, slotIndex);
         }
         this.onSlotClick?.(slotIndex);
       });
@@ -139,6 +147,7 @@ export interface HotbarPixelCallbacks {
   onColocarTutor?: () => void;
   onColocarPetate?: () => void;
   onSol?: () => void;
+  onAvanzarDias?: (dias: number) => void;
   onAbrirMochila?: () => void;
   onAbrirDispensador?: () => void;
 }
@@ -218,7 +227,9 @@ export class HotbarPixel {
       pointer-events: auto;
     `;
     const labores: { icon: string; label: string; fn?: () => void }[] = [
-      { icon: "☀️", label: "Sol +15d [Y]", fn: () => this.callbacks?.onSol?.() },
+      { icon: "🌅", label: "+1d", fn: () => (this.callbacks?.onAvanzarDias ? this.callbacks.onAvanzarDias(1) : this.callbacks?.onSol?.()) },
+      { icon: "🌤️", label: "+5d", fn: () => (this.callbacks?.onAvanzarDias ? this.callbacks.onAvanzarDias(5) : this.callbacks?.onSol?.()) },
+      { icon: "☀️", label: "+15d [Y]", fn: () => (this.callbacks?.onAvanzarDias ? this.callbacks.onAvanzarDias(15) : this.callbacks?.onSol?.()) },
       { icon: "🌰", label: "Dispensador [U]", fn: () => this.callbacks?.onAbrirDispensador?.() },
       { icon: "🗑️", label: "Quitar Planta [Q]", fn: () => this.callbacks?.onQuitarPlanta?.() },
       { icon: "🌿", label: "Deshierbar [X]", fn: () => this.callbacks?.onDeshierbar?.() },
@@ -261,8 +272,8 @@ export class HotbarPixel {
       justify-content: center;
     `;
 
-    // Las 9 primeras ranuras del inventario del jugador corresponden a la hotbar
-    this.grid = new PanelCuadricula(invJugador, cursor, 9, 0, 9);
+    // Las 9 primeras ranuras del inventario del jugador corresponden a la hotbar (solo selección, sin robar al cursor)
+    this.grid = new PanelCuadricula(invJugador, cursor, 9, 0, 9, true);
     panelWrap.appendChild(this.grid.el);
 
     // Separador visual discreto
@@ -321,8 +332,8 @@ export class HotbarPixel {
       gap: 1px;
       border-radius: 0;
     `;
-    this.btnTimeLapse.innerHTML = `<span style="font-size:14px;">▶</span><span>Crecimiento</span>`;
-    this.btnTimeLapse.title = "Avanzar el crecimiento del cultivo continuamente [Espacio]";
+    this.btnTimeLapse.innerHTML = `<span style="font-size:14px;">▶</span><span>[J] Crecer</span>`;
+    this.btnTimeLapse.title = "Avanzar el crecimiento del cultivo continuamente [J]";
     this.btnTimeLapse.addEventListener("click", () => this.callbacks?.onToggleTimeLapse?.());
     actionsBox.appendChild(this.btnTimeLapse);
 
@@ -404,10 +415,10 @@ export class HotbarPixel {
 
   public actualizarEstadoCrecimiento(reproduciendo: boolean): void {
     if (reproduciendo) {
-      this.btnTimeLapse.innerHTML = `<span style="font-size:14px;">⏸</span><span>Pausa</span>`;
+      this.btnTimeLapse.innerHTML = `<span style="font-size:14px;">⏸</span><span>[J] Pausa</span>`;
       this.btnTimeLapse.style.color = "#fdba74";
     } else {
-      this.btnTimeLapse.innerHTML = `<span style="font-size:14px;">▶</span><span>Crecimiento</span>`;
+      this.btnTimeLapse.innerHTML = `<span style="font-size:14px;">▶</span><span>[J] Crecer</span>`;
       this.btnTimeLapse.style.color = "#86efac";
     }
   }
@@ -478,19 +489,22 @@ export class ModalCofreTroje {
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.65);
-      z-index: 2200;
+      z-index: 2800;
       display: none;
       align-items: center;
       justify-content: center;
       user-select: none;
+      padding: 12px;
     `;
 
-    // Ventana biselada Minecraft
+    // Ventana biselada Minecraft (con scroll interno en pantallas compactas)
     this.ventana = document.createElement("div");
     this.ventana.className = "mc-panel";
     this.ventana.style.cssText = `
       padding: 16px;
       max-width: 95vw;
+      max-height: 92vh;
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -525,14 +539,20 @@ export class ModalCofreTroje {
 
     const btnDepositarMazorcas = this.crearBoton("📦 Guardar Mazorcas", () => {
       this.invJugador.moverTodoDe(this.troje, "mazorca");
+      this.onDepositoRapido?.();
     });
     toolbar.appendChild(btnDepositarMazorcas);
 
-    const btnDepositarTodo = this.crearBoton("📥 Depositar Todo", () => {
-      // Mover todo de la mochila (ranuras 9-35) al cofre
-      for (let i = 9; i < this.invJugador.tamano; i++) {
-        this.invJugador.moverA(this.troje, i);
+    const btnDepositarTodo = this.crearBoton("📥 Guardar Cosecha", () => {
+      // Mover únicamente productos cosechados (mazorca, huitlacoche, quelite), conservando herramientas y semillas
+      const cosechables = new Set(["mazorca", "huitlacoche", "quelite"]);
+      for (let i = 0; i < this.invJugador.tamano; i++) {
+        const s = this.invJugador.slots[i];
+        if (s && cosechables.has(s.id)) {
+          this.invJugador.moverA(this.troje, i);
+        }
       }
+      this.onDepositoRapido?.();
     });
     toolbar.appendChild(btnDepositarTodo);
 
@@ -590,7 +610,7 @@ export class ModalCofreTroje {
     this.cursorElemento.style.cssText = `
       position: fixed;
       pointer-events: none;
-      z-index: 3000;
+      z-index: 3500;
       display: none;
       width: 48px;
       height: 48px;
@@ -647,14 +667,14 @@ export class ModalCofreTroje {
       }
     }
 
-    // Compactar
+    // Compactar respetando variedad, tier de calidad y madurez (mismaClase)
     for (let i = 0; i < stacks.length; i++) {
       const a = stacks[i];
       if (a.cantidad <= 0) continue;
       const max = (DEFS[a.id]?.maxStack ?? 64);
       for (let j = i + 1; j < stacks.length; j++) {
         const b = stacks[j];
-        if (b.cantidad > 0 && a.id === b.id && a.meta?.variedad === b.meta?.variedad) {
+        if (b.cantidad > 0 && mismaClase(a, b)) {
           const espacio = max - a.cantidad;
           if (espacio > 0) {
             const mov = Math.min(espacio, b.cantidad);
@@ -713,9 +733,12 @@ export class ModalCofreTroje {
   }
 
   public cerrar(): void {
-    // Si tiene ítem en mano, devolverlo al inventario del jugador
+    // Si tiene ítem en mano, devolverlo al inventario del jugador; si está lleno, resguardarlo en la Troje
     if (this.cursor.enMano) {
-      this.invJugador.anadir(this.cursor.enMano);
+      const res = this.invJugador.agregar(this.cursor.enMano);
+      if (res.sobrante > 0) {
+        this.troje.agregar({ ...this.cursor.enMano, cantidad: res.sobrante });
+      }
       this.cursor.enMano = null;
     }
     this.estaAbierto = false;

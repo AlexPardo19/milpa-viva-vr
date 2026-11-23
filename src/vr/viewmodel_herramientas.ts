@@ -489,16 +489,16 @@ export class ViewmodelHerramientas {
           this.root.position.z = this.POS_REPOSO.z + f * 0.14;
 
           if (f >= 0.55) {
-            ejecutarImpacto(() => this.audio.golpeAzada());
+            ejecutarImpacto();
           }
         } else if (this.animacionProgreso <= 1.0) {
-          ejecutarImpacto(() => this.audio.golpeAzada());
+          ejecutarImpacto();
           const inv = 1 - (this.animacionProgreso - 0.65) / 0.35;
           this.root.rotation.x = this.ROT_REPOSO.x + 0.60 * inv;
           this.root.position.y = this.POS_REPOSO.y - 0.06 * inv;
           this.root.position.z = this.POS_REPOSO.z + 0.14 * inv;
         } else {
-          ejecutarImpacto(() => this.audio.golpeAzada());
+          ejecutarImpacto();
           this.estaAnimando = false;
         }
         break;
@@ -541,20 +541,14 @@ export class ViewmodelHerramientas {
           this.root.position.z = this.POS_REPOSO.z + f * 0.16;
           this.root.rotation.x = this.ROT_REPOSO.x + f * 0.35;
         } else if (this.animacionProgreso < 0.6) {
-          ejecutarImpacto(() =>
-            this.tipoAnimacion === "abono" ? this.audio.abono() : this.audio.semillas()
-          );
+          ejecutarImpacto();
         } else if (this.animacionProgreso <= 1.0) {
-          ejecutarImpacto(() =>
-            this.tipoAnimacion === "abono" ? this.audio.abono() : this.audio.semillas()
-          );
+          ejecutarImpacto();
           const inv = 1 - (this.animacionProgreso - 0.6) / 0.4;
           this.root.position.z = this.POS_REPOSO.z + 0.16 * inv;
           this.root.rotation.x = this.ROT_REPOSO.x + 0.35 * inv;
         } else {
-          ejecutarImpacto(() =>
-            this.tipoAnimacion === "abono" ? this.audio.abono() : this.audio.semillas()
-          );
+          ejecutarImpacto();
           this.estaAnimando = false;
         }
         break;
@@ -568,14 +562,14 @@ export class ViewmodelHerramientas {
           this.root.position.z = this.POS_REPOSO.z + f * 0.18;
           this.root.rotation.y = this.ROT_REPOSO.y + f * 0.28;
         } else if (this.animacionProgreso < 0.7) {
-          ejecutarImpacto(() => this.audio.cosecha());
+          ejecutarImpacto();
         } else if (this.animacionProgreso <= 1.0) {
-          ejecutarImpacto(() => this.audio.cosecha());
+          ejecutarImpacto();
           const inv = 1 - (this.animacionProgreso - 0.7) / 0.3;
           this.root.position.z = this.POS_REPOSO.z + 0.18 * inv;
           this.root.rotation.y = this.ROT_REPOSO.y + 0.28 * inv;
         } else {
-          ejecutarImpacto(() => this.audio.cosecha());
+          ejecutarImpacto();
           this.estaAnimando = false;
         }
         break;
@@ -583,7 +577,19 @@ export class ViewmodelHerramientas {
     }
   }
 
+  public cancelarAnimacion(): void {
+    if (this.estaAnimando && this.tipoAnimacion === "regadera") {
+      this.audio.detenerAgua();
+    }
+    this.estaAnimando = false;
+    this.onImpactoCallback = null;
+    this.animacionProgreso = 0;
+    this.root.position.copyFrom(this.POS_REPOSO);
+    this.root.rotation.copyFrom(this.ROT_REPOSO);
+  }
+
   public setVisible(visible: boolean): void {
+    if (!visible) this.cancelarAnimacion();
     this.root.setEnabled(visible);
   }
 }

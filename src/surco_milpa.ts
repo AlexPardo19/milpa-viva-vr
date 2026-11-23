@@ -68,14 +68,17 @@ export interface NodoSurco {
   tierraArada: number;      // 0 a 100%
   sembrada: boolean;
   humedadVWC: number;       // % VWC (PMP 12%, CC 32%, Sat 45%)
-  nutrientesNPK: number;    // % 0 a 100%
+  nutrientesNPK: number;    // % 0 a 100% (promedio ponderado de N, P, K)
+  nSuelo: number;           // 0..100% Nitrógeno (hojas/clorofila, fijado por frijol)
+  pSuelo: number;           // 0..100% Fósforo (raíces/floración)
+  kSuelo: number;           // 0..100% Potasio (llenado de grano/caña)
   gddAcumulados: number;
   frame60: number;          // 0.0 a 59.0
   cosechada: boolean;
   diasCultivo: number;
   diasAcumuladosPaso: number; // Tipado explícito (corrige H9)
 
-  // --- Nuevos campos v4.0 Milpa Viva VR ---
+  // --- Nuevos campos v4.0 / v4.1 Milpa Viva VR ---
   maleza: number;             // 0..100 (M3)
   plaga: number;              // 0..100 daño acumulado (M4)
   polinizacion: number;       // 0..1 cuajado asistido/natural (M5)
@@ -84,6 +87,9 @@ export interface NodoSurco {
   calidad: number;            // 0..1 calidad final de la mazorca (M8/M9)
   frijolVid: number;          // 0..1 crecimiento de la guía de frijol (M7)
   calabazaCobertura: number;  // 0..1 cobertura foliar del suelo (M7)
+  frijolCosechado: boolean;   // evita cosecha infinita en el mismo ciclo
+  calabazaCosechada: boolean; // evita cosecha infinita en el mismo ciclo
+  ultimoHashLetrero: string;  // dirty-check para evitar repintar DynamicTexture cada frame
 
   // Modelos 3D y materiales dedicados
   plantaInterna: Planta;
@@ -154,6 +160,40 @@ export class SurcoMilpa {
     if (this.shadowGen) {
       this.camellonMesh.receiveShadows = true;
     }
+  }
+
+  public calcularEscalaVariedad(variedad: TipoSemilla): number {
+    const varCfg = VARIEDADES_MAIZ[variedad || "chalqueno"];
+    return (varCfg.alturaMetrosMax / 3.5) * 0.38;
+  }
+
+  public estaListoParaCosecha(id: number): boolean {
+    const nodo = this.nodos[id];
+    if (!nodo || !nodo.sembrada || nodo.cosechada) return false;
+    const p = nodo.plantaInterna;
+    if (p.estado === "SEMILLA") return false;
+    const varCfg = VARIEDADES_MAIZ[nodo.variedad];
+    const etapaEnum = etapaDe(p.gdd, CFG, varCfg);
+    if (p.estado === "MUERTA" && p.causaMuerte !== "agotamiento") {
+      return etapaEnum >= Etapa.R3;
+    }
+    return etapaEnum >= Etapa.R3 || p.estado === "MADURA" || p.causaMuerte === "agotamiento";
+  }
+
+  public obtenerTipoCosecha(id: number): "elote" | "grano_seco" | "no_listo" {
+    if (!this.estaListoParaCosecha(id)) return "no_listo";
+    const nodo = this.nodos[id];
+    const p = nodo.plantaInterna;
+    const varCfg = VARIEDADES_MAIZ[nodo.variedad];
+    const etapaEnum = etapaDe(p.gdd, CFG, varCfg);
+    if (etapaEnum >= Etapa.R5 || p.estado === "MADURA" || p.causaMuerte === "agotamiento" || (p.secado ?? 0) > 0.65) {
+      return "grano_seco";
+    }
+    return "elote";
+  }
+
+  private sincronizarNPKPromedio(nodo: NodoSurco): void {
+    nodo.nutrientesNPK = Math.round((nodo.nSuelo + nodo.pSuelo + nodo.kSuelo) / 3);
   }
 
   private aplicarEstadoSuelo(
@@ -324,7 +364,7 @@ export class SurcoMilpa {
       proteccionMesh.setEnabled(false);
 
       // E. Planta de Maíz Estilizada
-      const factorEscala = (varCfg.alturaMetrosMax / 3.5) * 0.38;
+      const factorEscala = this.calcularEscalaVariedad(variedad);
       const maiz = new MaizEstilizado(this.scene, this.shadowGen, `maiz_${i}`, variedad);
       maiz.root.position.copyFrom(posMundo);
       maiz.root.position.y -= 0.02;
@@ -350,6 +390,9 @@ export class SurcoMilpa {
         sembrada: false,
         humedadVWC: 18.0,
         nutrientesNPK: 35.0,
+        nSuelo: 35.0,
+        pSuelo: 35.0,
+        kSuelo: 35.0,
         gddAcumulados: 0,
         frame60: 0,
         cosechada: false,
@@ -357,12 +400,15 @@ export class SurcoMilpa {
         diasAcumuladosPaso: 0,
         maleza: 0,
         plaga: 0,
-        polinizacion: 0.72,
+        polinizacion: 0.0,
         tutorado: false,
         proteccion: 0,
         calidad: 0.9,
         frijolVid: 0,
         calabazaCobertura: 0,
+        frijolCosechado: false,
+        calabazaCosechada: false,
+        ultimoHashLetrero: "",
         plantaInterna,
         estadoCrec,
         maiz,
@@ -406,11 +452,48 @@ export class SurcoMilpa {
     return { mesh, tex };
   }
 
-  public actualizarLetrero(id: number): void {
+  public actualizarLetrero(id: number, forzar = false): void {
     const nodo = this.nodos[id];
     if (!nodo) return;
 
     const varCfg = VARIEDADES_MAIZ[nodo.variedad];
+    const p = nodo.plantaInterna;
+    const estaMuerta = p.estado === "MUERTA";
+    const esSemilla = p.estado === "SEMILLA";
+    const secado = p.secado ?? 0;
+    const tieneHuitlacoche = (p.huitlacoche ?? 0) >= 0.45;
+    const gddEmergMeta = CFG.gddEmergencia * (varCfg.gddCicloCompleto / CFG.gddR6);
+    const pctGerm = esSemilla ? Math.min(99, Math.round((p.gddSiembra / Math.max(1, gddEmergMeta)) * 100)) : 100;
+    const tipoCos = this.obtenerTipoCosecha(id);
+
+    // Dirty-check para evitar repintar DynamicTexture cada frame
+    const hash = [
+      nodo.variedad,
+      nodo.sembrada ? 1 : 0,
+      nodo.cosechada ? 1 : 0,
+      nodo.tierraArada,
+      Math.floor(nodo.diasCultivo),
+      p.estado,
+      p.causaMuerte ?? "",
+      pctGerm,
+      nodo.estadoCrec.etapa,
+      Math.round(nodo.humedadVWC),
+      Math.round(nodo.nutrientesNPK),
+      Math.round(nodo.plaga),
+      Math.round(nodo.maleza),
+      Math.round(p.cuajado * 100),
+      Math.round(secado * 20),
+      nodo.frijolVid > 0.05 ? 1 : 0,
+      nodo.calabazaCobertura > 0.05 ? 1 : 0,
+      nodo.tutorado ? 1 : 0,
+      nodo.proteccion,
+      tieneHuitlacoche ? 1 : 0,
+      tipoCos
+    ].join("|");
+
+    if (!forzar && nodo.ultimoHashLetrero === hash) return;
+    nodo.ultimoHashLetrero = hash;
+
     const ctx = nodo.letreroTex.getContext() as any;
     const W = 256;
     const H = 140;
@@ -420,7 +503,7 @@ export class SurcoMilpa {
       W,
       H,
       "#fffbeb",
-      nodo.plaga > 25 ? "#b91c1c" : "#451a03",
+      nodo.plaga > 25 ? "#b91c1c" : tipoCos !== "no_listo" ? "#15803d" : "#451a03",
       "#d97706",
       4
     );
@@ -439,8 +522,6 @@ export class SurcoMilpa {
 
     ctx.fillStyle = "#1e293b";
     ctx.font = "bold 15px 'Pixelify Sans', monospace";
-    const estaMuerta = nodo.plantaInterna.estado === "MUERTA";
-    const secado = nodo.plantaInterna.secado ?? 0;
 
     if (!nodo.sembrada) {
       const msg = nodo.tierraArada < 100 ? `Tierra: ${nodo.tierraArada}%` : "Lista p/ Sembrar 🌱";
@@ -450,7 +531,7 @@ export class SurcoMilpa {
       ctx.fillText(`¡Cosechada! ★${Math.round(nodo.calidad * 100)}%`, 14, 56);
     } else if (estaMuerta) {
       ctx.fillStyle = "#b91c1c";
-      const causa = nodo.plantaInterna.causaMuerte || "clima";
+      const causa = p.causaMuerte || "clima";
       const etqCausa =
         causa === "agotamiento"
           ? "Ciclo Seco"
@@ -462,20 +543,25 @@ export class SurcoMilpa {
           ? "Calor 🔥"
           : causa === "encharcamiento"
           ? "Ahogada 🌊"
+          : causa === "pudricion_semilla"
+          ? "Semilla Fría"
           : causa;
       ctx.fillText(`💀 Muerta (${etqCausa})`, 14, 56);
+    } else if (esSemilla) {
+      ctx.fillStyle = "#047857";
+      ctx.fillText(`🌰 Germinando ${pctGerm}% · D${Math.floor(nodo.diasCultivo)}`, 14, 56);
+    } else if (tipoCos === "elote") {
+      ctx.fillStyle = "#15803d";
+      ctx.fillText(`🌽 Elote R3 (${Math.round(p.humedadGranoPct ?? 72)}%H) [9]`, 14, 56);
+    } else if (tipoCos === "grano_seco") {
+      ctx.fillStyle = "#b45309";
+      ctx.fillText(`🌾 Grano Seco (${Math.round(p.humedadGranoPct ?? 16)}%H) [9]`, 14, 56);
     } else if (secado > 0.35) {
       ctx.fillStyle = "#b45309";
       ctx.fillText(`🌾 Secándose (${Math.round(secado * 100)}%) D${Math.floor(nodo.diasCultivo)}`, 14, 56);
     } else {
-      const topeStr = nodo.plantaInterna.limiteAlcanzado
-        ? ` · Tope ${nodo.plantaInterna.alturaMetros.toFixed(1)}m`
-        : "";
-      ctx.fillText(
-        `Día ${Math.floor(nodo.diasCultivo)} (${nodo.estadoCrec.etapa.split(" ")[0]})${topeStr}`,
-        14,
-        56
-      );
+      const topeStr = p.limiteAlcanzado ? ` · ${p.alturaMetros.toFixed(1)}m` : "";
+      ctx.fillText(`Día ${Math.floor(nodo.diasCultivo)} (${nodo.estadoCrec.etapa.split(" ")[0]})${topeStr}`, 14, 56);
     }
 
     ctx.font = "13px 'Pixelify Sans', monospace";
@@ -485,12 +571,13 @@ export class SurcoMilpa {
     if (estaMuerta && !nodo.cosechada) {
       ctx.fillStyle = "#991b1b";
       ctx.fillText(
-        nodo.plantaInterna.causaMuerte === "agotamiento"
-          ? `🌽 Mazorca [7] o Quitar [Q]`
-          : `🗑️ Quitar planta seca [Q] / [1]`,
+        p.causaMuerte === "agotamiento" ? `🌽 Mazorca [9] o Quitar [Q]` : `🗑️ Quitar planta seca [Q] / [2]`,
         14,
         108
       );
+    } else if (tieneHuitlacoche && !nodo.cosechada) {
+      ctx.fillStyle = "#6d28d9";
+      ctx.fillText(`🍄 ¡Huitlacoche listo! [9]`, 14, 108);
     } else if (nodo.plaga > 10) {
       ctx.fillStyle = "#dc2626";
       ctx.fillText(`🐛 Plaga: ${Math.round(nodo.plaga)}% ¡Limpia!`, 14, 108);
@@ -500,7 +587,7 @@ export class SurcoMilpa {
     } else {
       ctx.fillStyle = "#15803d";
       const prot = (nodo.tutorado ? "🪵" : "") + (nodo.proteccion > 0 ? "🛡️" : "");
-      ctx.fillText(`✨ Cuajado: ${Math.round(nodo.plantaInterna.cuajado * 100)}% ${prot}`, 14, 108);
+      ctx.fillText(`✨ Cuajado: ${Math.round(p.cuajado * 100)}% ${prot}`, 14, 108);
     }
 
     nodo.letreroTex.update();
@@ -542,6 +629,8 @@ export class SurcoMilpa {
     nodo.polinizacion = 0;
     nodo.frijolVid = 0;
     nodo.calabazaCobertura = 0;
+    nodo.frijolCosechado = false;
+    nodo.calabazaCosechada = false;
     nodo.cultivoAsociado = "ninguno";
     nodo.tutorado = false;
     nodo.proteccion = 0;
@@ -553,7 +642,7 @@ export class SurcoMilpa {
     nodo.estadoCrec.plantaInterna = nodo.plantaInterna;
     nodo.estadoCrec.dia = 0;
     nodo.estadoCrec.gddAcumulado = 0;
-    nodo.estadoCrec.etapa = "VE (Emergencia)";
+    nodo.estadoCrec.etapa = nombreEtapa(Etapa.SEMILLA);
     nodo.estadoCrec.estaMuerta = false;
     nodo.estadoCrec.causaMuerte = null;
     nodo.estadoCrec.degradacion = 0;
@@ -570,12 +659,14 @@ export class SurcoMilpa {
     if (this.particulas) {
       this.particulas.efectoArarTierra(nodo.posicionMundo.add(new Vector3(0, 0.14, 0)));
     }
-    this.actualizarLetrero(id);
+    this.actualizarLetrero(id, true);
 
     // 2. Animación 3D de extracción de la planta (sacudida de raíz + elevación + inclinación + encogimiento)
     const rootMaiz = nodo.maiz.root;
     const posBase = nodo.posicionMundo.clone();
+    posBase.y -= 0.02;
     const rotYBase = rootMaiz.rotation.y;
+    const escalaBase = this.calcularEscalaVariedad(nodo.variedad);
     rootMaiz.setEnabled(true);
 
     let tiempoAnim = 0;
@@ -585,8 +676,8 @@ export class SurcoMilpa {
       if (nodo.sembrada) {
         rootMaiz.position.copyFrom(posBase);
         rootMaiz.rotation.set(0, rotYBase, 0);
-        rootMaiz.scaling.setAll(0.28);
-        rootMaiz.setEnabled(true);
+        rootMaiz.scaling.setAll(this.calcularEscalaVariedad(nodo.variedad));
+        rootMaiz.setEnabled(nodo.plantaInterna.estado !== "SEMILLA");
         this.scene.onBeforeRenderObservable.remove(obs);
         return;
       }
@@ -599,7 +690,7 @@ export class SurcoMilpa {
       // Vibración lateral inicial al aflojar raíces + extracción hacia arriba + inclinación y reducción
       const sacudida = Math.sin(p * Math.PI * 6) * 0.24 * (1 - p);
       const elevacion = Math.sin(p * Math.PI * 0.68) * 0.46;
-      const escala = 0.28 * Math.max(0.01, 1 - Math.pow(p, 1.55));
+      const escala = escalaBase * Math.max(0.01, 1 - Math.pow(p, 1.55));
 
       rootMaiz.position.set(posBase.x + sacudida * 0.12, posBase.y + elevacion, posBase.z);
       rootMaiz.rotation.set(p * 0.38, rotYBase + p * 0.45, sacudida + p * 0.65);
@@ -608,7 +699,7 @@ export class SurcoMilpa {
       if (p >= 1) {
         rootMaiz.position.copyFrom(posBase);
         rootMaiz.rotation.set(0, rotYBase, 0);
-        rootMaiz.scaling.setAll(0.28);
+        rootMaiz.scaling.setAll(escalaBase);
         rootMaiz.setEnabled(false);
         this.scene.onBeforeRenderObservable.remove(obs);
         if (onCompletado) onCompletado();
@@ -719,18 +810,24 @@ export class SurcoMilpa {
     }
     nodo.sembrada = true;
     nodo.cosechada = false;
-    nodo.diasCultivo = 4;
+    nodo.diasCultivo = 0;
     nodo.diasAcumuladosPaso = 0;
+    nodo.polinizacion = 0;
+    nodo.frijolCosechado = false;
+    nodo.calabazaCosechada = false;
     nodo.humedadVWC = Math.max(nodo.humedadVWC, 26.0);
     nodo.plantaInterna = crearPlanta(nodo.variedad, nodo.cultivoAsociado);
+    nodo.plantaInterna.tieneFrijol = nodo.frijolVid > 0;
+    nodo.plantaInterna.tieneCalabaza = nodo.calabazaCobertura > 0;
     if (rasgosHeredados) {
       nodo.plantaInterna.rasgosHeredados = { ...rasgosHeredados };
     }
-    nodo.plantaInterna.estado = "VIVA";
+    // Fase A real de germinación (SEMILLA -> VE al acumular GDD térmicos con humedad adecuada)
+    nodo.plantaInterna.estado = "SEMILLA";
     nodo.estadoCrec.plantaInterna = nodo.plantaInterna;
-    nodo.estadoCrec.dia = 4;
+    nodo.estadoCrec.dia = 0;
     nodo.estadoCrec.gddAcumulado = 0;
-    nodo.estadoCrec.etapa = "VE (Emergencia)";
+    nodo.estadoCrec.etapa = nombreEtapa(Etapa.SEMILLA);
     nodo.estadoCrec.estaMuerta = false;
     nodo.estadoCrec.causaMuerte = null;
     nodo.estadoCrec.degradacion = 0;
@@ -739,7 +836,8 @@ export class SurcoMilpa {
     nodo.estadoCrec.amarillamiento = 0;
     nodo.estadoCrec.acameGrados = 0;
 
-    nodo.maiz.root.setEnabled(true);
+    nodo.maiz.root.scaling.setAll(this.calcularEscalaVariedad(nodo.variedad));
+    nodo.maiz.root.setEnabled(false);
     nodo.semillasMesh.forEach((grano) => grano.setEnabled(true));
 
     const climaDummy: ClimateState = {
@@ -755,17 +853,17 @@ export class SurcoMilpa {
       co2: 415,
       pm25: 15
     };
-    nodo.maiz.sincronizarConEstado(nodo.estadoCrec, climaDummy, calcularMetricas(climaDummy));
+    nodo.maiz.sincronizarConEstado(nodo.estadoCrec, climaDummy, calcularMetricas(climaDummy, nodo.variedad));
 
     if (this.particulas) {
       this.particulas.emitirHaloSemilla(nodo.posicionMundo.add(new Vector3(0, 0.08, 0)));
     }
 
-    this.actualizarLetrero(id);
+    this.actualizarLetrero(id, true);
     const varCfg = VARIEDADES_MAIZ[nodo.variedad];
     return {
       exito: true,
-      mensaje: `🌱 ¡Sembrada semilla de ${varCfg.nombre} en la estación ${id + 1}!`,
+      mensaje: `🌱 ¡Sembrada semilla de ${varCfg.nombre} en la estación ${id + 1}! Mantén humedad (22–34% VWC) para germinar.`,
       variedad: varCfg
     };
   }
@@ -812,7 +910,10 @@ export class SurcoMilpa {
     const nodo = this.nodos[id];
     if (!nodo) return { exito: false, mensaje: "Estación inválida", nuevoNPK: 0 };
 
-    nodo.nutrientesNPK = Math.min(100, nodo.nutrientesNPK + incremento);
+    nodo.nSuelo = Math.min(100, nodo.nSuelo + incremento);
+    nodo.pSuelo = Math.min(100, nodo.pSuelo + incremento * 0.9);
+    nodo.kSuelo = Math.min(100, nodo.kSuelo + incremento * 0.95);
+    this.sincronizarNPKPromedio(nodo);
     if (nodo.nutrientesNPK > 94) {
       // M1: Exceso de sales minerales quema levemente raíces
       nodo.plantaInterna.vigor = Math.max(0.4, nodo.plantaInterna.vigor - 0.05);
@@ -828,7 +929,7 @@ export class SurcoMilpa {
       mensaje:
         nodo.nutrientesNPK > 94
           ? `⚠️ Planta ${id + 1}: Exceso de abono (${Math.round(nodo.nutrientesNPK)}%). ¡No satures las raíces!`
-          : `🌿 Planta ${id + 1} fertilizada con éxito (${Math.round(nodo.nutrientesNPK)}% N-P-K).`,
+          : `🌿 Planta ${id + 1} fertilizada (N ${Math.round(nodo.nSuelo)}% · P ${Math.round(nodo.pSuelo)}% · K ${Math.round(nodo.kSuelo)}%).`,
       nuevoNPK: nodo.nutrientesNPK
     };
   }
@@ -916,21 +1017,46 @@ export class SurcoMilpa {
         mensaje: `⚠️ La planta en Estación #${id + 1} ya fue cosechada. Quítala con [Q] para iniciar un nuevo ciclo.`
       };
     }
+    if (tipo === "frijol" && nodo.frijolVid > 0) {
+      return {
+        exito: false,
+        mensaje: `🫘 Ya hay Frijol Ayocote trepando en la Estación #${id + 1}.`
+      };
+    }
+    if (tipo === "calabaza" && nodo.calabazaCobertura > 0) {
+      return {
+        exito: false,
+        mensaje: `🎃 Ya hay Calabaza Criolla cubriendo el suelo de la Estación #${id + 1}.`
+      };
+    }
+
     nodo.cultivoAsociado = tipo;
     nodo.plantaInterna.cultivoAsociado = tipo;
     if (tipo === "frijol") {
-      nodo.frijolVid = Math.max(0.25, nodo.frijolVid);
+      nodo.frijolVid = 0.25;
+      nodo.frijolCosechado = false;
+      nodo.plantaInterna.tieneFrijol = true;
     } else {
-      nodo.calabazaCobertura = Math.max(0.25, nodo.calabazaCobertura);
+      nodo.calabazaCobertura = 0.25;
+      nodo.calabazaCosechada = false;
+      nodo.plantaInterna.tieneCalabaza = true;
     }
-    this.actualizarLetrero(id);
+    this.actualizarLetrero(id, true);
+    const triadaCompleta = nodo.frijolVid > 0 && nodo.calabazaCobertura > 0;
     return {
       exito: true,
-      mensaje:
-        tipo === "frijol"
-          ? `🫘 ¡Frijol sembrado al pie de la Planta ${id + 1}! Fijará nitrógeno al trepar.`
-          : `🎃 ¡Calabaza sembrada en la Planta ${id + 1}! Sus hojas cubrirán el suelo contra maleza y sequía.`
+      mensaje: triadaCompleta
+        ? `🔺 ¡Tríada Mesoamericana completa en Planta ${id + 1}! Maíz + Frijol Ayocote + Calabaza Criolla en simbiosis.`
+        : tipo === "frijol"
+        ? `🫘 ¡Frijol Ayocote sembrado al pie de la Planta ${id + 1}! Fijará nitrógeno (Rhizobium) en suelo aireado.`
+        : `🎃 ¡Calabaza Criolla sembrada en la Planta ${id + 1}! Sus hojas cubrirán el suelo contra maleza y sequía.`
     };
+  }
+
+  public obtenerEtapaNodo(id: number): Etapa {
+    const n = this.nodos[id];
+    if (!n || !n.sembrada || n.plantaInterna.estado === "SEMILLA") return Etapa.SEMILLA;
+    return etapaDe(n.plantaInterna.gdd, CFG, VARIEDADES_MAIZ[n.variedad]);
   }
 
   public cosechar(id: number): {
@@ -939,6 +1065,8 @@ export class SurcoMilpa {
     variedad?: VariedadMaizConfig;
     earMesh?: TransformNode | null;
     calidad?: number;
+    tipoCosecha?: "elote" | "grano_seco";
+    tieneHuitlacoche?: boolean;
   } {
     const nodo = this.nodos[id];
     if (!nodo) return { exito: false, mensaje: "Estación inválida" };
@@ -951,7 +1079,7 @@ export class SurcoMilpa {
 
     const varCfg = VARIEDADES_MAIZ[nodo.variedad];
     const p = nodo.plantaInterna;
-    const etapaEnum = etapaDe(p.gdd, CFG, varCfg);
+    const etapaEnum = p.estado === "SEMILLA" ? Etapa.SEMILLA : etapaDe(p.gdd, CFG, varCfg);
 
     // Si murió prematuramente por condiciones climáticas adversas antes de madurar
     if (p.estado === "MUERTA" && p.causaMuerte !== "agotamiento" && etapaEnum < Etapa.R3) {
@@ -959,29 +1087,37 @@ export class SurcoMilpa {
         p.causaMuerte === "helada"
           ? "una helada severa (necesitaba Petate [G] o temperatura más cálida)"
           : p.causaMuerte === "sequia"
-          ? `la sequía (suelo < ${varCfg.pmp}% VWC sin riego [4])`
+          ? `la sequía (suelo < ${varCfg.pmp}% VWC sin riego [7])`
           : p.causaMuerte === "calor"
           ? `el calor extremo (> ${varCfg.tCorte + 4} °C)`
           : p.causaMuerte === "encharcamiento"
           ? "asfixia radicular por exceso de agua (necesitaba drenaje con Azada [2])"
+          : p.causaMuerte === "pudricion_semilla"
+          ? "pudrición de semilla por suelo frío (< 10 °C)"
           : `estrés climático (${p.causaMuerte || "severo"})`;
       return {
         exito: false,
-        mensaje: `💀 El ${varCfg.nombre} en estación ${id + 1} murió por ${descCausa}. Limpia la planta seca con la Azada [2] para volver a sembrar.`
+        mensaje: `💀 El ${varCfg.nombre} en estación ${id + 1} murió por ${descCausa}. Limpia la planta seca con [Q] o Azada [2] para volver a sembrar.`
       };
     }
 
-    if (nodo.diasCultivo < REGLAS_JUEGO.DIAS_COSECHA_MIN && etapaEnum < Etapa.R3) {
+    // Regla fenológica real: requiere alcanzar al menos R3 (Elote) — evita cosechar plántulas estancadas o bloquear razas precoces
+    if (!this.estaListoParaCosecha(id)) {
+      const etapaLabel = p.estado === "SEMILLA" ? "Germinando" : nombreEtapa(etapaEnum).split(" ")[0];
       return {
         exito: false,
-        mensaje: `¡El elote ${id + 1} aún no está listo (Día ${Math.floor(nodo.diasCultivo)}/${REGLAS_JUEGO.DIAS_COSECHA_MIN} · ${nombreEtapa(etapaEnum).split(" ")[0]})! Dale más sol.`
+        mensaje: `¡El elote ${id + 1} aún no está listo (${etapaLabel} · Día ${Math.floor(nodo.diasCultivo)})! Debe llegar al menos a etapa R3.`
       };
     }
+
+    const tipoCosecha: "elote" | "grano_seco" =
+      this.obtenerTipoCosecha(id) === "grano_seco" ? "grano_seco" : "elote";
+    const tieneHuitlacoche = (p.huitlacoche ?? 0) >= 0.45;
 
     nodo.cosechada = true;
     const bonusTriada = nodo.frijolVid > 0.3 && nodo.calabazaCobertura > 0.3 ? 0.15 : 0;
     const sanidad = 1 - (nodo.plaga / 100) * 0.5;
-    const vigorEfectivo = p.estado === "MUERTA" && p.causaMuerte === "agotamiento" ? 0.65 : p.vigor;
+    const vigorEfectivo = p.estado === "MUERTA" && p.causaMuerte === "agotamiento" ? 0.72 : p.vigor;
     nodo.calidad = clamp01(
       0.45 * vigorEfectivo +
         0.35 * p.cuajado +
@@ -996,17 +1132,20 @@ export class SurcoMilpa {
       this.particulas.emitirConfeti(nodo.posicionMundo.add(new Vector3(0, 1.2, 0)));
     }
 
-    this.actualizarLetrero(id);
+    this.actualizarLetrero(id, true);
     const tipoMazorca =
-      p.causaMuerte === "agotamiento" || (p.secado ?? 0) > 0.7
-        ? "mazorca seca de semilla"
-        : "elote fresco";
+      tipoCosecha === "grano_seco"
+        ? `mazorca seca de grano/semilla (${Math.round(p.humedadGranoPct ?? 16)}% hum.)`
+        : `elote fresco R3 (${Math.round(p.humedadGranoPct ?? 72)}% hum.)`;
+    const extraHuitla = tieneHuitlacoche ? " + 🍄 ¡Huitlacoche gourmet!" : "";
     return {
       exito: true,
-      mensaje: `🌽 ¡Cosechaste ${tipoMazorca} de ${varCfg.nombre} en Planta ${id + 1} (Calidad ${Math.round(nodo.calidad * 100)}%)!`,
+      mensaje: `🌽 ¡Cosechaste ${tipoMazorca} de ${varCfg.nombre} en Planta ${id + 1} (Calidad ${Math.round(nodo.calidad * 100)}%)${extraHuitla}!`,
       variedad: varCfg,
       earMesh: ear,
-      calidad: nodo.calidad
+      calidad: nodo.calidad,
+      tipoCosecha,
+      tieneHuitlacoche
     };
   }
 
@@ -1025,25 +1164,28 @@ export class SurcoMilpa {
   }
 
   /**
-   * Avanza la simulación temporal agronómica de cada nodo integrando M3, M4, M5, M6 y M7
+   * Avanza la simulación temporal agronómica de cada nodo integrando M3, M4, M5, M6, M7 y agronomía v4.1
    */
   public avanzarSimulacion(
     dtDias: number,
     clima: ClimateState,
     metricas: Metricas,
-    severidadEvento = 0
+    severidadEvento = 0,
+    factorDificultadMaleza = 1.0
   ): void {
     for (const nodo of this.nodos) {
-      // M3: Crecimiento de maleza si la tierra está arada y la planta está viva
+      // M3: Crecimiento de maleza si la tierra está arada y la planta está sembrada y viva (evita pop-in oculto)
       if (
         nodo.tierraArada >= 100 &&
+        nodo.sembrada &&
         !nodo.cosechada &&
-        (!nodo.sembrada || nodo.plantaInterna.estado !== "MUERTA")
+        nodo.plantaInterna.estado !== "MUERTA"
       ) {
         const supresion = 0.65 * nodo.calabazaCobertura + 0.15 * nodo.frijolVid;
         const dMaleza =
           dtDias *
           0.65 *
+          factorDificultadMaleza *
           (nodo.humedadVWC / 32) *
           (1 + nodo.nutrientesNPK / 120) *
           Math.max(0.08, 1 - supresion);
@@ -1053,25 +1195,41 @@ export class SurcoMilpa {
       if (!nodo.sembrada || nodo.cosechada) continue;
 
       const varCfg = VARIEDADES_MAIZ[nodo.variedad];
-      // Límite máximo de días del ciclo: una vez muerta la planta, el contador de ciclo se detiene en su tope
-      const diasMaxCiclo = Math.round(185 * (varCfg.gddCicloCompleto / 1850));
+      const diasMaxCiclo = Math.round(215 * (varCfg.gddCicloCompleto / 1850));
       if (nodo.plantaInterna.estado !== "MUERTA") {
-        nodo.diasCultivo = Math.min(diasMaxCiclo + 25, nodo.diasCultivo + dtDias);
-      }
-
-      // M7: Crecimiento de guías de frijol y cobertura de calabaza
-      if (nodo.frijolVid > 0) {
-        nodo.frijolVid = clamp01(nodo.frijolVid + dtDias * 0.012);
-        nodo.nutrientesNPK = Math.min(100, nodo.nutrientesNPK + dtDias * 0.45);
-      }
-      if (nodo.calabazaCobertura > 0) {
-        nodo.calabazaCobertura = clamp01(nodo.calabazaCobertura + dtDias * 0.014);
+        nodo.diasCultivo = Math.min(diasMaxCiclo + 45, nodo.diasCultivo + dtDias);
       }
 
       // M6: Protecciones del jugador contra heladas y vendavales
-      const abrigoGrados = [0, 1.5, 3.5][nodo.proteccion] ?? 0;
-      const tMinEfectiva = clima.temperatura - 5 + abrigoGrados - severidadEvento * 2.0;
+      const abrigoGrados = [0, 1.8, 3.8][nodo.proteccion] ?? 0;
+      const tMaxDia = clima.temperatura + 3.0;
+      const tMinEfectiva = clima.temperatura - 8.0 + abrigoGrados - severidadEvento * 2.0;
+      const tMedDia = (tMaxDia + tMinEfectiva) / 2.0;
       const vientoEfectivo = nodo.tutorado ? clima.viento * 0.45 : clima.viento;
+      // Trade-off real del petate: si se deja puesto bajo sol sin frío, sombrea la radiación PAR (~42% menos luz)
+      const factorLuzPetate = nodo.proteccion > 0 && clima.temperatura > 12 ? 0.58 : 1.0;
+
+      // M7: Crecimiento climático real de Frijol Ayocote y Calabaza Criolla (sensibles a helada y sequía extrema)
+      const climaAptoAsociados = tMinEfectiva > 0.5 && nodo.humedadVWC > 11 && clima.temperatura < 38;
+      if (nodo.frijolVid > 0) {
+        if (tMinEfectiva <= -1.0) {
+          nodo.frijolVid = Math.max(0.05, nodo.frijolVid - dtDias * 0.04);
+        } else if (climaAptoAsociados) {
+          nodo.frijolVid = clamp01(nodo.frijolVid + dtDias * 0.012);
+          // Simbiosis Rhizobium real: solo fija Nitrógeno si el suelo está aireado (<=38% VWC) y pH 5.6..7.4
+          if (nodo.humedadVWC <= 38 && clima.phSuelo >= 5.6 && clima.phSuelo <= 7.4) {
+            nodo.nSuelo = Math.min(100, nodo.nSuelo + dtDias * 0.65);
+            this.sincronizarNPKPromedio(nodo);
+          }
+        }
+      }
+      if (nodo.calabazaCobertura > 0) {
+        if (tMinEfectiva <= -0.5) {
+          nodo.calabazaCobertura = Math.max(0.05, nodo.calabazaCobertura - dtDias * 0.05);
+        } else if (climaAptoAsociados) {
+          nodo.calabazaCobertura = clamp01(nodo.calabazaCobertura + dtDias * 0.014);
+        }
+      }
 
       // Fisiología pura de Zea mays y balance diario de suelo/agua/nutrientes acumulando días enteros
       nodo.diasAcumuladosPaso += dtDias;
@@ -1081,7 +1239,10 @@ export class SurcoMilpa {
         const maxPasos = Math.min(pasosEnteros, 60);
 
         for (let s = 0; s < maxPasos; s++) {
-          const etapaDia = etapaDe(nodo.plantaInterna.gdd, CFG, varCfg);
+          const etapaDia =
+            nodo.plantaInterna.estado === "SEMILLA"
+              ? Etapa.SEMILLA
+              : etapaDe(nodo.plantaInterna.gdd, CFG, varCfg);
           const factorCritico = etapaDia >= Etapa.V2 && etapaDia <= Etapa.V8 ? 1.8 : 1.0;
           const factorPorteMaleza = nodo.variedad === "palomero" ? 1.65 : 1.0;
           const competencia = 1 + 0.45 * (nodo.maleza / 100) * factorCritico * factorPorteMaleza;
@@ -1102,30 +1263,26 @@ export class SurcoMilpa {
             60.0
           );
 
-          // Consumo diario de nutrientes
-          const demandaNPK = nodo.variedad === "chalqueno" ? 0.24 : 0.18;
-          nodo.nutrientesNPK = Math.max(10.0, nodo.nutrientesNPK - demandaNPK * competencia);
+          // Consumo diario diferenciado de N, P y K según demanda de cada raza
+          const dN = (varCfg.demandaN === "Alta" ? 0.28 : varCfg.demandaN === "Media" ? 0.20 : 0.14) * competencia;
+          const dP = (varCfg.demandaP === "Alta" ? 0.20 : 0.14) * competencia;
+          const dK = (varCfg.demandaK === "Alta" ? 0.24 : 0.16) * competencia;
+          nodo.nSuelo = Math.max(8.0, nodo.nSuelo - dN);
+          nodo.pSuelo = Math.max(8.0, nodo.pSuelo - dP);
+          nodo.kSuelo = Math.max(8.0, nodo.kSuelo - dK);
+          this.sincronizarNPKPromedio(nodo);
 
-          // M5: Polinización natural al pasar por ventana VT -> R1
-          if (etapaDia === Etapa.VT || etapaDia === Etapa.R1) {
+          // M5: Polinización natural al pasar por ventana VT -> R2
+          if (etapaDia >= Etapa.VT && etapaDia <= Etapa.R2) {
             const umbralCalorPolen = nodo.variedad === "azul" ? 28.0 : varCfg.tCorte;
-            const viento01 = clamp01(1 - Math.abs(clima.viento - 2.8) / 2.8);
+            const viento01 = clamp01(1 - Math.abs(clima.viento - 2.8) / 3.2);
             const calor01 = clamp01(1 - Math.max(0, clima.temperatura - umbralCalorPolen) / 7);
-            const lluvia01 = 1 - clamp01(clima.lluvia / 10);
-            nodo.polinizacion = Math.min(1, nodo.polinizacion + 0.14 * viento01 * calor01 * lluvia01);
+            const lluvia01 = 1 - clamp01(clima.lluvia / 12);
+            nodo.polinizacion = Math.min(1, nodo.polinizacion + 0.11 * viento01 * calor01 * lluvia01);
           }
 
-          // Efectos de fertilidad NPK y competencia por maleza según especie
+          // Competencia por maleza acentuada en Palomero (porte bajo)
           if (nodo.plantaInterna.estado !== "MUERTA" && nodo.plantaInterna.estado !== "MADURA") {
-            if (nodo.variedad === "chalqueno") {
-              if (nodo.nutrientesNPK < 35) {
-                nodo.plantaInterna.vigor = clamp01(
-                  nodo.plantaInterna.vigor - 0.015 * ((35 - nodo.nutrientesNPK) / 25)
-                );
-              } else if (nodo.nutrientesNPK >= 55) {
-                nodo.plantaInterna.vigor = clamp01(nodo.plantaInterna.vigor + 0.008);
-              }
-            }
             if (nodo.variedad === "palomero" && nodo.maleza > 30) {
               nodo.plantaInterna.vigor = clamp01(
                 nodo.plantaInterna.vigor - 0.018 * ((nodo.maleza - 30) / 70)
@@ -1133,11 +1290,16 @@ export class SurcoMilpa {
             }
           }
 
+          // Radiación PAR diurna estimada independiente de la hora nocturna instantánea (para pasos diarios)
+          const factorNub = 1 - 0.7 * Math.pow(clima.nubosidad / 100, 2.4);
+          const factorAer = Math.exp(-clima.pm25 / 900);
+          const parDiarioEst = 1350 * factorNub * factorAer * (1 - 0.4 * clamp01(clima.lluvia / 30));
+
           const climaDia: ClimaDia = {
-            tMax: clima.temperatura + 5,
+            tMax: tMaxDia,
             tMin: tMinEfectiva,
-            tMed: clima.temperatura,
-            tSuelo: clima.temperatura - 1.5 + abrigoGrados * 0.5,
+            tMed: tMedDia,
+            tSuelo: Math.max(4, tMedDia - 0.5 + abrigoGrados * 0.4),
             hr: clima.humedad,
             vwc: nodo.humedadVWC,
             ph: clima.phSuelo,
@@ -1145,23 +1307,32 @@ export class SurcoMilpa {
             lluvia: clima.lluvia,
             co2: clima.co2,
             presion: clima.presion,
+            nubosidad: clima.nubosidad,
+            pm25: clima.pm25,
             horasBajoMenos2_5: tMinEfectiva <= -1.5 ? 3.5 : 0,
-            estresBiotico: clamp01(nodo.plaga / 100)
+            estresBiotico: clamp01(nodo.plaga / 100),
+            parDiario: parDiarioEst,
+            factorLuz: factorLuzPetate,
+            nSuelo: nodo.nSuelo,
+            pSuelo: nodo.pSuelo,
+            kSuelo: nodo.kSuelo,
+            riesgoFungico: metricas.riesgoFungico,
+            polinizacionNivel: nodo.polinizacion
           };
 
+          nodo.plantaInterna.tieneFrijol = nodo.frijolVid > 0;
+          nodo.plantaInterna.tieneCalabaza = nodo.calabazaCobertura > 0;
           pasoDia(nodo.plantaInterna, climaDia, CFG);
         }
       }
-
-      // Sincronizar cuajado con polinización asistida (M5)
-      nodo.plantaInterna.cuajado = Math.max(nodo.plantaInterna.cuajado, nodo.polinizacion);
 
       // Copiar todos los estados fisiológicos, de secado y de muerte al EstadoCrecimiento para el render 3D
       const p = nodo.plantaInterna;
       nodo.gddAcumulados = p.gdd;
       nodo.estadoCrec.dia = nodo.diasCultivo;
       nodo.estadoCrec.gddAcumulado = p.gdd;
-      nodo.estadoCrec.etapa = nombreEtapa(etapaDe(nodo.gddAcumulados, CFG, varCfg));
+      nodo.estadoCrec.etapa =
+        p.estado === "SEMILLA" ? nombreEtapa(Etapa.SEMILLA) : nombreEtapa(etapaDe(nodo.gddAcumulados, CFG, varCfg));
       nodo.estadoCrec.plantaInterna = p;
       nodo.estadoCrec.saludVital = p.vigor;
       nodo.estadoCrec.acameGrados = p.acameGrados;
@@ -1187,11 +1358,12 @@ export class SurcoMilpa {
         nodo.maleza = 0;
       }
 
-      if (nodo.diasCultivo >= 4.2 || p.estado !== "SEMILLA") {
+      // Ocultar granos superficiales cuando la plántula ya emergió
+      if (p.estado !== "SEMILLA") {
         nodo.semillasMesh.forEach((grano) => grano.setEnabled(false));
       }
 
-      nodo.maiz.sincronizarConEstado(nodo.estadoCrec, clima, metricas);
+      nodo.maiz.sincronizarConEstado(nodo.estadoCrec, clima, calcularMetricas(clima, nodo.variedad));
 
       const suelo60 = obtenerEstadoSuelo60(
         nodo.tierraArada,
@@ -1208,11 +1380,12 @@ export class SurcoMilpa {
   public animarViento(tiempoAcumulado: number, viento: number): void {
     for (let i = 0; i < this.nodos.length; i++) {
       const nodo = this.nodos[i];
-      if (nodo.sembrada && !nodo.cosechada) {
+      if (nodo.sembrada && nodo.plantaInterna.estado !== "SEMILLA") {
         const desfase = i * 0.45;
+        const vientoNodo = nodo.cosechada ? viento * 0.4 : nodo.tutorado ? viento * 0.45 : viento;
         nodo.maiz.animarViento(
           tiempoAcumulado + desfase,
-          nodo.tutorado ? viento * 0.45 : viento,
+          vientoNodo,
           nodo.estadoCrec.acameGrados,
           nodo.estadoCrec.estaMuerta
         );
@@ -1250,6 +1423,9 @@ export class SurcoMilpa {
       n.diasCultivo = 0;
       n.diasAcumuladosPaso = 0;
       n.humedadVWC = 24;
+      n.nSuelo = 45;
+      n.pSuelo = 45;
+      n.kSuelo = 45;
       n.nutrientesNPK = 45;
       n.gddAcumulados = 0;
       n.frame60 = 0;
@@ -1261,24 +1437,30 @@ export class SurcoMilpa {
       n.calidad = 0.85;
       n.frijolVid = 0;
       n.calabazaCobertura = 0;
+      n.frijolCosechado = false;
+      n.calabazaCosechada = false;
       n.cultivoAsociado = "ninguno";
       n.plantaInterna = crearPlanta(n.variedad, "ninguno");
       n.estadoCrec.plantaInterna = n.plantaInterna;
       n.estadoCrec.dia = 0;
       n.estadoCrec.gddAcumulado = 0;
-      n.estadoCrec.etapa = "VE (Emergencia)";
+      n.estadoCrec.etapa = nombreEtapa(Etapa.SEMILLA);
       n.estadoCrec.estaMuerta = false;
       n.estadoCrec.causaMuerte = null;
       n.estadoCrec.degradacion = 0;
       n.estadoCrec.acameGrados = 0;
       n.tutorMesh.setEnabled(false);
       n.proteccionMesh.setEnabled(false);
-      n.maiz.root.position.copyFrom(n.posicionMundo);
-      n.maiz.root.scaling.setAll(0.28);
+      n.maiz.root.position.set(n.posicionMundo.x, n.posicionMundo.y - 0.02, n.posicionMundo.z);
+      n.maiz.root.scaling.setAll(this.calcularEscalaVariedad(n.variedad));
       n.maiz.root.setEnabled(false);
       n.semillasMesh.forEach((g) => g.setEnabled(false));
       n.surcosMesh.forEach((s) => s.scaling.set(1, 0.001, 1));
-      this.actualizarLetrero(i);
+      const suelo60 = obtenerEstadoSuelo60(0, n.humedadVWC, false);
+      this.aplicarEstadoSuelo(n, suelo60);
+      n.monticuloMesh.scaling.y = 1.0;
+      n.charcoMat.alpha = 0;
+      this.actualizarLetrero(i, true);
     }
   }
 
@@ -1291,6 +1473,9 @@ export class SurcoMilpa {
       sembrada: n.sembrada,
       humedadVWC: n.humedadVWC,
       nutrientesNPK: n.nutrientesNPK,
+      nSuelo: n.nSuelo,
+      pSuelo: n.pSuelo,
+      kSuelo: n.kSuelo,
       gddAcumulados: n.gddAcumulados,
       frame60: n.frame60,
       cosechada: n.cosechada,
@@ -1303,6 +1488,8 @@ export class SurcoMilpa {
       calidad: n.calidad,
       frijolVid: n.frijolVid,
       calabazaCobertura: n.calabazaCobertura,
+      frijolCosechado: n.frijolCosechado,
+      calabazaCosechada: n.calabazaCosechada,
       plantaInterna: {
         ...n.plantaInterna,
         rasgosHeredados: n.plantaInterna.rasgosHeredados
@@ -1327,6 +1514,10 @@ export class SurcoMilpa {
       n.sembrada = !!s.sembrada;
       n.humedadVWC = s.humedadVWC ?? 24;
       n.nutrientesNPK = s.nutrientesNPK ?? 45;
+      n.nSuelo = s.nSuelo ?? n.nutrientesNPK;
+      n.pSuelo = s.pSuelo ?? n.nutrientesNPK;
+      n.kSuelo = s.kSuelo ?? n.nutrientesNPK;
+      this.sincronizarNPKPromedio(n);
       n.gddAcumulados = s.gddAcumulados ?? 0;
       n.frame60 = s.frame60 ?? 0;
       n.cosechada = !!s.cosechada;
@@ -1340,11 +1531,15 @@ export class SurcoMilpa {
       n.calidad = s.calidad ?? 0.85;
       n.frijolVid = s.frijolVid ?? 0;
       n.calabazaCobertura = s.calabazaCobertura ?? 0;
+      n.frijolCosechado = !!s.frijolCosechado;
+      n.calabazaCosechada = !!s.calabazaCosechada;
 
       if (s.plantaInterna) {
         n.plantaInterna = {
           ...s.plantaInterna,
           variedad: n.variedad,
+          tieneFrijol: n.frijolVid > 0,
+          tieneCalabaza: n.calabazaCobertura > 0,
           rasgosHeredados: s.plantaInterna.rasgosHeredados
             ? { ...s.plantaInterna.rasgosHeredados }
             : undefined
@@ -1354,30 +1549,51 @@ export class SurcoMilpa {
       }
 
       const varCfg = VARIEDADES_MAIZ[n.variedad];
+      const p = n.plantaInterna;
       n.maiz.setVariedad(n.variedad);
-      n.estadoCrec.plantaInterna = n.plantaInterna;
+      n.estadoCrec.plantaInterna = p;
       n.estadoCrec.dia = n.diasCultivo;
       n.estadoCrec.gddAcumulado = n.gddAcumulados;
-      const etapa = etapaDe(n.gddAcumulados, CFG, varCfg);
+      const etapa = p.estado === "SEMILLA" ? Etapa.SEMILLA : etapaDe(n.gddAcumulados, CFG, varCfg);
       n.estadoCrec.etapa = nombreEtapa(etapa);
-      n.estadoCrec.estaMuerta = n.plantaInterna.estado === "MUERTA";
-      n.estadoCrec.causaMuerte = n.plantaInterna.causaMuerte ?? null;
+      n.estadoCrec.estaMuerta = p.estado === "MUERTA";
+      n.estadoCrec.causaMuerte = p.causaMuerte ?? null;
+      n.estadoCrec.saludVital = p.vigor;
+      n.estadoCrec.degradacion = p.degradacion;
+      n.estadoCrec.acameGrados = p.acameGrados;
+      n.estadoCrec.pesoSequia = Math.max(p.sequia, (p.secado ?? 0) * 0.65);
+      n.estadoCrec.pesoFrio = p.frio;
+      n.estadoCrec.amarillamiento = p.amarillamiento;
+      n.estadoCrec.antocianina = p.antocianina;
+      n.estadoCrec.alturaMetros = p.alturaMetros;
+      n.estadoCrec.escalaPlanta = p.escala;
+      n.estadoCrec.cuajado = p.cuajado;
 
       n.tutorMesh.setEnabled(n.tutorado);
       n.proteccionMesh.setEnabled(n.proteccion > 0);
-      n.surcosMesh.forEach((sm) => {
-        sm.scaling.y = n.tierraArada >= 100 ? 1.0 : Math.max(0.001, n.tierraArada / 100);
+      const nivelArado = n.tierraArada / 100;
+      n.surcosMesh.forEach((sm, idx) => {
+        sm.scaling.y = Math.max(0.001, Math.min(1.0, nivelArado * 3 - idx));
+        sm.scaling.x = 1.0 + nivelArado * 0.35;
       });
-      n.semillasMesh.forEach((gm) => gm.setEnabled(n.sembrada && n.diasCultivo < 8));
+      n.semillasMesh.forEach((gm) => gm.setEnabled(n.sembrada && p.estado === "SEMILLA"));
 
-      const factorFrame = Math.min(1, n.frame60 / 59);
-      const escala = n.sembrada ? 0.28 + factorFrame * 0.14 : 0.28;
-      n.maiz.root.scaling.setAll(escala);
-      n.maiz.root.setEnabled(n.sembrada);
+      // Restaurar color, humedad, rugosidad y charco del montículo
+      const suelo60 = obtenerEstadoSuelo60(n.tierraArada, n.humedadVWC, n.humedadVWC > 38);
+      this.aplicarEstadoSuelo(n, suelo60);
+      n.monticuloMesh.scaling.y = 1.0 + suelo60.rugosidad * 0.35;
+      n.charcoMat.alpha = suelo60.laminillaAgua;
+
+      // Escala coherente por variedad (sin distorsión)
+      n.maiz.root.scaling.setAll(this.calcularEscalaVariedad(n.variedad));
+      n.maiz.root.setEnabled(n.sembrada && p.estado !== "SEMILLA");
       if (n.sembrada) {
-        n.maiz.sincronizarConEstado(n.estadoCrec, clima, metricas);
+        n.maiz.sincronizarConEstado(n.estadoCrec, clima, calcularMetricas(clima, n.variedad));
+        if (n.cosechada) {
+          n.maiz.ocultarMazorcas();
+        }
       }
-      this.actualizarLetrero(i);
+      this.actualizarLetrero(i, true);
     }
   }
 }
