@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:https": "HTTPS=true vite",
-    "dev:http": "NO_HTTPS=true vite",
+    "dev:https": "vite --mode https",
+    "dev:http": "vite --mode http",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "render": "node scripts/render_cartoon_all.js"

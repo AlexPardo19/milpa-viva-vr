@@ -175,12 +175,29 @@ export function aplicarEstiloPatrix(
   let ssaoPipeline: Nullable<SSAO2RenderingPipeline> = null;
   const camarasVinculadas = new Set<Camera>();
 
+  const esCamaraVR = (cam: Camera): boolean => {
+    if (!cam) return true;
+    const esRig = Boolean((cam as unknown as { isRigCamera?: boolean }).isRigCamera);
+    if (esRig) return true;
+    const nombre = cam.name || "";
+    const clase = typeof cam.getClassName === "function" ? cam.getClassName() : "";
+    return (
+      nombre.includes("DK2") ||
+      nombre.includes("SBS") ||
+      nombre.endsWith("_L") ||
+      nombre.endsWith("_R") ||
+      clase.includes("VR") ||
+      clase.includes("WebXR")
+    );
+  };
+
   const vincularCamara = (cam: Camera): void => {
     if (headless || esSafari || !cam) return;
     if (camarasVinculadas.has(cam)) return;
-    // Ignorar subcámaras stereo rig de WebXR en SSAO para no romper buffers VR
-    const esRig = Boolean((cam as unknown as { isRigCamera?: boolean }).isRigCamera);
-    if (esRig) return;
+    // Ignorar cámaras VR/SBS y subcámaras rig (_L/_R): en Babylon onNewCameraAddedObservable
+    // se dispara antes de asignar isRigCamera = true, y adjuntar SSAO/DefaultPipeline rompe el
+    // viewport estéreo y corrompe el pipeline al hacer dispose() de la cámara SBS.
+    if (esCamaraVR(cam)) return;
 
     camarasVinculadas.add(cam);
     try {
@@ -203,9 +220,7 @@ export function aplicarEstiloPatrix(
 
   if (!headless && !esSafari) {
     try {
-      const iniciales = scene.cameras.filter(
-        (c) => !Boolean((c as unknown as { isRigCamera?: boolean }).isRigCamera)
-      );
+      const iniciales = scene.cameras.filter((c) => !esCamaraVR(c));
       iniciales.forEach((c) => camarasVinculadas.add(c));
 
       if (SSAO2RenderingPipeline.IsSupported) {
@@ -259,6 +274,29 @@ export function aplicarEstiloPatrix(
     // Cualquier cámara nueva no-VR agregada después se registra automáticamente
     scene.onNewCameraAddedObservable.add((cam) => {
       vincularCamara(cam);
+    });
+
+    // Al eliminar una cámara vinculada, desacoplarla de los pipelines sin destruir los post-procesos compartidos
+    scene.onCameraRemovedObservable.add((cam) => {
+      if (!cam || !camarasVinculadas.has(cam)) return;
+      camarasVinculadas.delete(cam);
+      try {
+        if (ssaoPipeline) {
+          scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline(
+            "patrixSSAOPipeline",
+            cam
+          );
+        }
+        if (defaultPipeline) {
+          scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline(
+            "patrixDefaultPipeline",
+            cam
+          );
+        }
+      } catch {
+        /* cámara ya desacoplada */
+      }
+      scene.prePassRenderer?.markAsDirty();
     });
   }
 
@@ -374,6 +412,10 @@ export function aplicarEstiloPatrix(
     ajustarPostProcesoXR(enXR: boolean) {
       if (ssaoPipeline) {
         ssaoPipeline.totalStrength = enXR ? 0.0 : 1.05;
+      }
+      if (scene.prePassRenderer) {
+        scene.prePassRenderer.markAsDirty();
+        scene.prePassRenderer.update();
       }
     },
     aplicarGradoHorario(

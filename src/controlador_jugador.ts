@@ -120,6 +120,8 @@ export class ControladorJugador {
   public tipoObjetivoEnfocado: TipoObjetivo3D = "ninguno";
   public meshEnfocadoNombre = "";
   public miraEnDonElote = false;
+  /** true mientras hay una sesión WebXR inmersiva activa (desactiva clic/pointer-lock de escritorio) */
+  public entradaBloqueadaXR = false;
 
   constructor(
     scene: Scene,
@@ -316,6 +318,7 @@ export class ControladorJugador {
 
     // Clic Izquierdo (adquirir PointerLock o usar herramienta) y Clic Derecho (interacción contextual)
     this.canvas.addEventListener("pointerdown", (ev) => {
+      if (this.entradaBloqueadaXR) return;
       if (this.modo !== "fps" || this.hayModalAbierto()) return;
       if (ev.button === 0) {
         // El primer clic que adquiere PointerLock no debe disparar la herramienta accidentalmente
@@ -341,6 +344,18 @@ export class ControladorJugador {
         this.ejecutarInteraccionContextualDerecho();
       }
     });
+  }
+
+  /**
+   * Cambia a la herramienta anterior/siguiente de la Hotbar (usado por gamepad / DK2 en WebXR)
+   */
+  public ciclarHerramienta(dir: 1 | -1): HerramientaTipo {
+    const idxActual = ORDEN_HOTBAR.indexOf(this.viewmodel.herramientaActual);
+    const nuevoIdx = (idxActual + dir + ORDEN_HOTBAR.length) % ORDEN_HOTBAR.length;
+    const nuevaH = ORDEN_HOTBAR[nuevoIdx];
+    this.equipar(nuevaH);
+    this.onCambioHerramientaRueda?.(nuevaH);
+    return nuevaH;
   }
 
   public alternarModo(): void {

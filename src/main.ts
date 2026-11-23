@@ -51,6 +51,7 @@ import { actualizarCaja, registrarSolidoDesdeNodo } from "./colisiones";
 import { MesaClimaPrejuego } from "./vr/mesa_clima_prejuego";
 import { LocomocionVR } from "./vr/locomocion_vr";
 import { InteraccionManos6DoF } from "./vr/interaccion_manos_6dof";
+import { SoporteDK2 } from "./vr/soporte_dk2";
 import { CinturonHerramientas } from "./vr/cinturon_herramientas";
 import { RelojMuneca } from "./vr/reloj_muneca";
 import { UiPoke } from "./vr/ui_poke";
@@ -989,6 +990,58 @@ async function crearEscena(): Promise<Scene> {
   });
   controladorXbox.factorHaptico = ajustesSistema.valores.intensidadHaptica;
 
+  // G3. Soporte Oculus Rift DK2: mirada en WebXR, estéreo SBS [F8], giroscopio USB WebHID [F9] y HUD 3D [F10]
+  const soporteDK2 = new SoporteDK2(
+    scene,
+    canvas,
+    surcoMilpa,
+    controladorJugador,
+    interaccion6DoF,
+    locomocionVR,
+    espantapajaros,
+    xrExperience,
+    {
+      onToast: (msg) => uiEdu?.mostrarToast(msg),
+      onSiguienteEstacion: () => {
+        if (!surcoMilpa || !locomocionVR) return;
+        const nextId = (surcoMilpa.nodoSeleccionadoId + 1) % surcoMilpa.nodos.length;
+        locomocionVR.teletransportarANodo(nextId);
+        sincronizarNodoConUI();
+        uiEdu?.mostrarToast(`👉 Estación ${nextId + 1}: ${VARIEDADES_MAIZ[surcoMilpa.nodos[nextId].variedad].nombre}`);
+      },
+      onAsegurarJuegoActivo: () => {
+        if (menuPrincipal?.estaAbierto()) {
+          menuPrincipal.ocultar();
+          prepararEntradaAlSurco();
+        }
+        if (menuPausa?.estaAbierto()) {
+          menuPausa.ocultar();
+        }
+        if (modalControles?.estaAbierto()) {
+          modalControles.ocultar();
+        }
+      },
+      onCambioModoVR: (enVR) => {
+        ambiente?.estiloPatrix.ajustarPostProcesoXR(enVR);
+        if (!enVR && menuPausa?.estaAbierto()) {
+          menuPausa.ocultar(false);
+        }
+      },
+      obtenerHotbar: () => ({
+        slots: inventarioJugador
+          ? inventarioJugador.slots.slice(0, 9).map((s) => (s ? { id: s.id, cantidad: s.cantidad } : null))
+          : [],
+        mochila: inventarioJugador
+          ? inventarioJugador.slots.slice(9).map((s) => (s ? { id: s.id, cantidad: s.cantidad } : null))
+          : [],
+        slotActivo: hotbarPixel ? hotbarPixel.slotActivo : 0,
+        mazorcasTroje: inventarioTroje ? inventarioTroje.cuenta("mazorca") : 0,
+        inventarioAbierto: !!modalCofreTroje?.estaAbierto
+      })
+    }
+  );
+  (window as any).soporteDK2 = soporteDK2;
+
   // Exponer referencias globales para depuración y pruebas automatizadas
   (window as any).camaraPrincipal = camera;
   (window as any).controladorJugador = controladorJugador;
@@ -1736,6 +1789,19 @@ async function crearEscena(): Promise<Scene> {
     }
   });
 
+  const origMostrarToast = uiEdu.mostrarToast.bind(uiEdu);
+  uiEdu.mostrarToast = (texto: string) => {
+    origMostrarToast(texto);
+    soporteDK2?.mostrarMensajeVR(texto, 4500);
+  };
+  if (espantapajaros) {
+    const origDecir = espantapajaros.decir.bind(espantapajaros);
+    espantapajaros.decir = (texto: string, duracionSeg = 6.0, titulo = "🧑‍🌾 Don Elote:") => {
+      origDecir(texto, duracionSeg, titulo);
+      soporteDK2?.mostrarMensajeVR(`${titulo} ${texto}`, Math.round(duracionSeg * 1000));
+    };
+  }
+
   // Inicializar Modal de Controles y Menús estilo Minecraft (Inicio + Pausa + Persistencia)
   modalControles = new ModalControlesBienvenida();
   modalControles.onCerrar = () => {
@@ -2263,6 +2329,10 @@ async function crearEscena(): Promise<Scene> {
         panelClima?.toggle();
         return;
       }
+      if (soporteDK2?.enSBS) {
+        soporteDK2.desactivarSBS();
+        return;
+      }
       if (menuPrincipal?.estaAbierto()) {
         return;
       }
@@ -2484,8 +2554,17 @@ crearEscena()
     // 3. Respaldo por temporizador de seguridad (máximo 400 ms) para garantizar que nunca se quede trabado
     setTimeout(ocultarPantallaCarga, 400);
 
+    let ultimoErrorRenderMs = 0;
     engine.runRenderLoop(() => {
-      scene.render();
+      try {
+        scene.render();
+      } catch (err) {
+        const ahora = performance.now();
+        if (ahora - ultimoErrorRenderMs > 2000) {
+          ultimoErrorRenderMs = ahora;
+          console.error("Error recuperado en ciclo de renderizado:", err);
+        }
+      }
     });
   })
   .catch((err) => {
